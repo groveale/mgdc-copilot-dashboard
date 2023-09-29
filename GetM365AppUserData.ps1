@@ -1,0 +1,250 @@
+#############################################
+# Description: 
+#              
+#
+#
+# Alex Grover - alexgrover@microsoft.com
+#
+# VersionLog : 
+# 2023-09-27 - Initial version
+#
+#
+##############################################
+# Dependencies
+##############################################
+
+
+# Graph Permissions
+# User.Read.All
+# Reports.Read.All
+
+
+##############################################
+# Variables
+##############################################
+
+# Auth
+$clientId = "38acafba-2eb6-4510-848e-070b493ea4dc"
+$tenantId = "groverale.onmicrosoft.com"
+$thumbprint = "72A385EF67B35E1DFBACA89180B7B3C8F97453D7"
+
+# Log file location (timestamped with script start time)
+$timeStamp = Get-Date -Format "yyyyMMddHHmmss"
+$reportFileLocation = "Output\M365AppUsageReportTotals-$timeStamp.csv"
+$dataFolder = "Data\"
+
+# Days to go back (max is 28)
+$daysToGoBack = 28
+
+# Users to check config
+$checkAllUsers = $false                 # If true, all users in the tenant will be checked
+$checkAllLicensedUsers = $true         # If true, only users with licenses in the $licenseSKUs array will be checked
+$usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
+
+# Licenses to check
+$licenseSKUs = @(
+    "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
+    "c7df2760-2c81-4ef7-b578-5b5392b571df", # Microsoft 365 E5
+    "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
+)
+
+##############################################
+# Functions
+##############################################
+
+function ConnectToMSGraph 
+{  
+    try{
+        Connect-MgGraph -ClientId $clientId -TenantId $tenantId -CertificateThumbprint $thumbprint
+    }
+    catch{
+        Write-Host "Error connecting to MS Graph - $($Error[0].Exception.Message)" -ForegroundColor Red
+        Exit
+    }
+}
+
+function Get-AppUserDetailsForDate($date) {
+
+    try {
+        $dateString = $date.ToString("yyyy-MM-dd")
+        $outputPath = Join-Path -Path $dataFolder -ChildPath "M365AppUserReport-$dateString.csv"
+        Get-MgReportM365AppUserDetail -Date $date -OutFile $outputPath
+        return $true
+    }
+    catch {
+        Write-Error "Error getting app user details for date $date - $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function CombineAndTransformData {
+    $combinedData = @()
+    $files = Get-ChildItem -Path $dataFolder -Filter *.csv
+    foreach($file in $files) {
+        $data = Import-Csv -Path $file.FullName
+        $combinedData += $data
+    }
+
+    return $combinedData
+}
+
+function PullAppUsageData {
+    for($i = 0; $i -lt $daysToGoBack; $i++) {
+        $today = Get-Date
+        $date = $today.AddDays(-$i)
+    
+        # If 2 days ago or less allways get new data
+        if($i -le 2) {
+            Write-Host "Getting app user details for date $date"
+            Get-AppUserDetailsForDate($date)
+            continue
+        }
+    
+        # Check if we already have the data for this date
+        $appData = Get-ChildItem -Path $dataFolder -Filter "M365AppUserReport-$($date.ToString("yyyy-MM-dd")).csv"
+        if($appData) {
+            Write-Host "Data already exists for date $date"
+            continue
+        }
+    
+        Write-Host "Getting app user details for date $date"
+        Get-AppUserDetailsForDate($date)
+    }
+}
+
+function GetUsersToCheck {
+
+    $users = @()
+
+    if ($checkAllUsers) {
+        return Get-MgUser -All -Property UserPrincipalName
+    }
+
+    if ($checkAllLicensedUsers) {
+        $allUsers = Get-MgUser -All -Property UserPrincipalName, Id
+        foreach($user in $allUsers) {
+            $licenses = Get-MgUserLicenseDetail -UserId $user.Id
+            foreach($license in $licenses) {
+                if($licenseSKUs.Contains($license.SkuId)) {
+                    $users += $user
+                    break
+                }
+            }
+        }
+        return $users
+    }
+    
+    if (-not (Test-Path -Path $usersToCheckPath)) {
+        Write-Error "UsersToCheck file not found"
+        Exit
+    }
+
+    $usersToCheck = Get-Content -Path $usersToCheckPath
+    foreach($user in $usersToCheck) {
+        $user = $user.Trim()
+        $user = Get-MgUser -UserId $user -Property UserPrincipalName
+        if($user) {
+            $users += $user
+        }
+    }
+
+    return $users
+}
+
+function GetUsersTotalAppUsage($userAppData, $upn) {
+    $usersTotalAppUsage = @{}
+    $usersTotalAppUsage.Add("User Principal Name", $upn)
+
+    ## If we get a single day where the user has used the app from a platform, 
+    ## we will assume they are a user of that platform
+    $windowsUser = ($userData | where { $_.Windows -eq "Yes" }).Lenght -gt 0
+    $macUser = ($userData | where { $_.Mac -eq "Yes" }).Lenght -gt 0
+    $mobileUser = ($userData | where { $_.Mobile -eq "Yes" }).Lenght -gt 0
+    $webUser = ($userData | where { $_.Web -eq "Yes" }).Lenght -gt 0
+
+    ## Add platform usage
+    $usersTotalAppUsage.Add("WindowsUser", $windowsUser)
+    $usersTotalAppUsage.Add("MacUser", $macUser)
+    $usersTotalAppUsage.Add("MobileUser", $mobileUser)
+    $usersTotalAppUsage.Add("WebUser", $webUser)
+
+    ## Daily app counts
+    $outlookDailyUsageCount = 0
+    $wordDailyUsageCount = 0
+    $excelDailyUsageCount = 0
+    $powerpointDailyUsageCount = 0
+    $teamsDailyUsageCount = 0
+    $onenoteDailyUsageCount = 0
+
+    ## Go through each day and count the app usage
+    foreach($day in $userAppData) {
+
+        if ($day.Outlook -eq "Yes") {
+            $outlookDailyUsageCount++
+        }
+
+        if ($day.Word -eq "Yes") {
+            $wordDailyUsageCount++
+        }
+
+        if ($day.Excel -eq "Yes") {
+            $excelDailyUsageCount++
+        }
+
+        if ($day.PowerPoint -eq "Yes") {
+            $powerpointDailyUsageCount++
+        }
+
+        if ($day.Teams -eq "Yes") {
+            $teamsDailyUsageCount++
+        }
+
+        if ($day.OneNote -eq "Yes") {
+            $onenoteDailyUsageCount++
+        }
+    }
+
+    ## Add daily app counts
+    $usersTotalAppUsage.Add("OutlookUsageDays", $outlookDailyUsageCount)
+    $usersTotalAppUsage.Add("WordUsageDays", $wordDailyUsageCount)
+    $usersTotalAppUsage.Add("ExcelUsageDays", $excelDailyUsageCount)
+    $usersTotalAppUsage.Add("PowerPointUsageDays", $powerpointDailyUsageCount)
+    $usersTotalAppUsage.Add("TeamsUsageDays", $teamsDailyUsageCount)
+    $usersTotalAppUsage.Add("OneNoteUsageDays", $onenoteDailyUsageCount)
+    
+    return $usersTotalAppUsage
+}
+
+##############################################
+# Main
+##############################################
+
+ConnectToMSGraph
+
+PullAppUsageData
+
+$users = GetUsersToCheck
+
+## Now the data part
+$combinedData = CombineAndTransformData
+
+# Get Total days were of data
+$files = Get-ChildItem -Path $dataFolder -Filter *.csv
+$totalDaysOfData = $files.Count
+
+## Go through each user and filter the data by user
+$allUsersTotalAppUsage = @()
+foreach($user in $users) {
+    $userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.UserPrincipalName }
+    
+    ## Go through each day record and check if the user has used the app
+    $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.UserPrincipalName
+
+    ## Add total days of data
+    $usersTotalAppUsage.Add("TotalDaysOfData", $totalDaysOfData)
+
+    $allUsersTotalAppUsage += $usersTotalAppUsage
+}
+
+## Output the data
+$allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation
