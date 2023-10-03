@@ -1,18 +1,49 @@
 #############################################
 # Description: 
-#              
+# This script pulls M365 app usage data from MSGraph and outputs a CSV file with the following data:
+# - User Principal Name
+# - WindowsUser (If the user has acced M365 from a Windows device)
+# - MacUser (If the user has acced M365 from a Mac device)
+# - MobileUser (If the user has acced M365 from a Mobile device)
+# - WebUser (If the user has acced M365 from a Web browser)
+# - OutlookUsageDays (Number of days Outlook was used)
+# - WordUsageDays (Number of days Word was used)
+# - ExcelUsageDays (Number of days Excel was used)
+# - PowerPointUsageDays (Number of days PowerPoint was used)
+# - TeamsUsageDays (Number of days Teams was used)
+# - OneNoteUsageDays (Number of days OneNote was used)
+# - TotalDaysOfData (Total number of days of data)
+# - LicensedForCopilot (If the users license is cable of adding Copilot e.g. E3 / E5)
+# - TotalDaysOfData (Total number of days of data)
 #
+# This report can be used to understand heavy users of M365. Aka good candidates for Copilot.
+#              
+# Todo:
+# - Add support for getting users emails sent in period [Content generation]
+# - Add support for total files created in SPO / Teams [Content generation]
+# - Add support for users total Teams Meetings / Chats [Summarization]
+# - Add support for users MSSearch queries (may not be possible) [Content Search]
 #
 # Alex Grover - alexgrover@microsoft.com
 #
 # VersionLog : 
 # 2023-09-27 - Initial version
+# 2023-10-03 - Fixed bug in returning user platform usage
+#
 #
 #
 ##############################################
 # Dependencies
 ##############################################
-
+## Requires the following modules:
+try {
+    Import-Module Microsoft.Graph.Reports
+    Import-Module Microsoft.Graph.Users
+}
+catch {
+    Write-Error "Error importing modules required modules - $($Error[0].Exception.Message))"
+    Exit
+}
 
 # Graph Permissions
 # User.Read.All
