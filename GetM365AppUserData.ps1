@@ -55,6 +55,8 @@ catch {
 ##############################################
 
 # Auth
+$delegatedAuth = $true                 # If true, delegated auth will be used. If false, app only auth will be used
+
 $clientId = "38acafba-2eb6-4510-848e-070b493ea4dc"
 $tenantId = "groverale.onmicrosoft.com"
 $thumbprint = "72A385EF67B35E1DFBACA89180B7B3C8F97453D7"
@@ -86,6 +88,12 @@ $licenseSKUs = @(
 function ConnectToMSGraph 
 {  
     try{
+
+        if($delegatedAuth) {
+            Connect-MgGraph -Scopes "User.Read.All, Reports.Read.All" -UseDeviceAuthentication
+            return
+        }
+
         Connect-MgGraph -ClientId $clientId -TenantId $tenantId -CertificateThumbprint $thumbprint
     }
     catch{
