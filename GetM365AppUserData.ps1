@@ -37,8 +37,8 @@ $dataFolder = "Data\"
 $daysToGoBack = 28
 
 # Users to check config
-$checkAllUsers = $false                 # If true, all users in the tenant will be checked
-$checkAllLicensedUsers = $true         # If true, only users with licenses in the $licenseSKUs array will be checked
+$checkAllUsers = $true                 # If true, all users in the tenant will be checked
+$checkAllLicensedUsers = $false         # If true, only users with licenses in the $licenseSKUs array will be checked
 $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
 
 # Licenses to check
@@ -68,6 +68,20 @@ function Get-AppUserDetailsForDate($date) {
     try {
         $dateString = $date.ToString("yyyy-MM-dd")
         $outputPath = Join-Path -Path $dataFolder -ChildPath "M365AppUserReport-$dateString.csv"
+        Get-MgReportM365AppUserDetail -Date $date -OutFile $outputPath
+        return $true
+    }
+    catch {
+        Write-Error "Error getting app user details for date $date - $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Get-GetExchangeData($date) {
+
+    try {
+        $dateString = $date.ToString("yyyy-MM-dd")
+        $outputPath = Join-Path -Path $dataFolder -ChildPath "ExchangeUserReport-$dateString.csv"
         Get-MgReportM365AppUserDetail -Date $date -OutFile $outputPath
         return $true
     }
@@ -117,18 +131,15 @@ function GetUsersToCheck {
     $users = @()
 
     if ($checkAllUsers) {
-        return Get-MgUser -All -Property UserPrincipalName
+        return Get-MgUser -All -Property UserPrincipalName, Id
     }
 
     if ($checkAllLicensedUsers) {
         $allUsers = Get-MgUser -All -Property UserPrincipalName, Id
         foreach($user in $allUsers) {
-            $licenses = Get-MgUserLicenseDetail -UserId $user.Id
-            foreach($license in $licenses) {
-                if($licenseSKUs.Contains($license.SkuId)) {
-                    $users += $user
-                    break
-                }
+            if (IsUserLicensedForCopilot -userId $user.Id)
+            {
+                $users += $user
             }
         }
         return $users
@@ -142,7 +153,7 @@ function GetUsersToCheck {
     $usersToCheck = Get-Content -Path $usersToCheckPath
     foreach($user in $usersToCheck) {
         $user = $user.Trim()
-        $user = Get-MgUser -UserId $user -Property UserPrincipalName
+        $user = Get-MgUser -UserId $user -Property UserPrincipalName, Id
         if($user) {
             $users += $user
         }
@@ -151,16 +162,27 @@ function GetUsersToCheck {
     return $users
 }
 
+function IsUserLicensedForCopilot($userId) {
+    $licenses = Get-MgUserLicenseDetail -UserId $userId
+    foreach($license in $licenses) {
+        if($licenseSKUs.Contains($license.SkuId)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function GetUsersTotalAppUsage($userAppData, $upn) {
     $usersTotalAppUsage = @{}
     $usersTotalAppUsage.Add("User Principal Name", $upn)
 
     ## If we get a single day where the user has used the app from a platform, 
     ## we will assume they are a user of that platform
-    $windowsUser = ($userData | where { $_.Windows -eq "Yes" }).Lenght -gt 0
-    $macUser = ($userData | where { $_.Mac -eq "Yes" }).Lenght -gt 0
-    $mobileUser = ($userData | where { $_.Mobile -eq "Yes" }).Lenght -gt 0
-    $webUser = ($userData | where { $_.Web -eq "Yes" }).Lenght -gt 0
+    $windowsUser = ($userAppData | where { $_.Windows -eq "Yes" }).Length -gt 0
+    $macUser = ($userAppData | where { $_.Mac -eq "Yes" }).Length -gt 0
+    $mobileUser = ($userAppData | where { $_.Mobile -eq "Yes" }).Length -gt 0
+    $webUser = ($userAppData | where { $_.Web -eq "Yes" }).Length -gt 0
 
     ## Add platform usage
     $usersTotalAppUsage.Add("WindowsUser", $windowsUser)
@@ -223,6 +245,8 @@ ConnectToMSGraph
 
 PullAppUsageData
 
+#PullEmailUsageData
+
 $users = GetUsersToCheck
 
 ## Now the data part
@@ -242,6 +266,11 @@ foreach($user in $users) {
 
     ## Add total days of data
     $usersTotalAppUsage.Add("TotalDaysOfData", $totalDaysOfData)
+
+    ## Is the user licensed for copilot
+    $usersTotalAppUsage.Add("LicensedForCopilot", (IsUserLicensedForCopilot -userId $user.Id))
+
+    ## Emails Read and Eamil Sent
 
     $allUsersTotalAppUsage += $usersTotalAppUsage
 }
