@@ -88,9 +88,11 @@ $licenseSKUs = @(
 function ConnectToMSGraph 
 {  
     try{
+        # Disconnect if already connected
+        #Disconnect-MgGraph
 
         if($delegatedAuth) {
-            Connect-MgGraph -Scopes "User.Read.All, Reports.Read.All" -UseDeviceAuthentication
+            Connect-MgGraph
             return
         }
 
