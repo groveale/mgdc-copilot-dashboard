@@ -92,11 +92,11 @@ function ConnectToMSGraph
         #Disconnect-MgGraph
 
         if($delegatedAuth) {
-            Connect-MgGraph
+            Connect-MgGraph -Scopes Reports.Read.All, User.Read.All -ErrorAction Stop
             return
         }
 
-        Connect-MgGraph -ClientId $clientId -TenantId $tenantId -CertificateThumbprint $thumbprint
+        Connect-MgGraph -ClientId $clientId -TenantId $tenantId -CertificateThumbprint $thumbprint -ErrorAction Stop
     }
     catch{
         Write-Host "Error connecting to MS Graph - $($Error[0].Exception.Message)" -ForegroundColor Red
