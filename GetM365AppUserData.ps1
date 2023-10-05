@@ -14,22 +14,25 @@
 # - OneNoteUsageDays (Number of days OneNote was used)
 # - TotalDaysOfData (Total number of days of data)
 # - LicensedForCopilot (If the users license is cable of adding Copilot e.g. E3 / E5)
-# - TotalDaysOfData (Total number of days of data)
+# - EmailsSentInPeriod (Number of emails sent in the period)
+# - ActiveFilesInSPOInPeriod (Number of active files in SPO in the period)
+# - ActiveFilesInOneDriveInPeriod (Number of active files in OneDrive in the period)
+# - DeepAnalysisPeriod (Period the data was collected for e.g. D30)
 #
 # This report can be used to understand heavy users of M365. Aka good candidates for Copilot.
 #              
 # Todo:
-# - Add support for getting users emails sent in period [Content generation]
-# - Add support for total files created in SPO / Teams [Content generation]
 # - Add support for users total Teams Meetings / Chats [Summarization]
 # - Add support for users MSSearch queries (may not be possible) [Content Search]
+# - Add support for users SPO active files (report is currently unavalible) [Content generation]
+# - Check support if masking is enabled
 #
 # Alex Grover - alexgrover@microsoft.com
 #
 # VersionLog : 
 # 2023-09-27 - Initial version
 # 2023-10-03 - Fixed bug in returning user platform usage
-#
+# 2023-10-03 - Added deeper analysis options for Emails Sent and Active Files in OneDrive
 #
 #
 ##############################################
@@ -80,6 +83,10 @@ $licenseSKUs = @(
     "c7df2760-2c81-4ef7-b578-5b5392b571df", # Microsoft 365 E5
     "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
 )
+
+# Deeper Analysis
+$deepAnalysis = $true                    # If true, deeper analysis will be done (Email, OneDrive)
+$period = "D30"                          # Period to get data for (D7 = 7 days, D30 = 30 days, D90 = 90 days, D180 = 180 days)
 
 ##############################################
 # Functions
@@ -134,7 +141,7 @@ function Get-GetExchangeData($date) {
 
 function CombineAndTransformData {
     $combinedData = @()
-    $files = Get-ChildItem -Path $dataFolder -Filter *.csv
+    $files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
     foreach($file in $files) {
         $data = Import-Csv -Path $file.FullName
         $combinedData += $data
@@ -164,6 +171,55 @@ function PullAppUsageData {
     
         Write-Host "Getting app user details for date $date"
         Get-AppUserDetailsForDate($date)
+    }
+}
+
+function PullEmailUsageData ($period) {
+    $today = Get-Date
+    $outputPath = Join-Path -Path $dataFolder -ChildPath "ExchangeUserReport-$($today.ToString("yyyy-MM-dd"))-$period.csv"
+    
+    try {
+        $existingReport = Get-ChildItem -Path $outputPath -ErrorAction Stop
+        if ($existingReport) {
+            return Import-Csv $outputPath  
+        }
+    } catch {
+        Get-MgReportEmailActivityUserDetail -Period $period -OutFile $outputPath
+        return Import-Csv $outputPath
+    }
+    
+}
+
+function PullOneDriveUsageData ($period) {
+    $today = Get-Date
+    $outputPath = Join-Path -Path $dataFolder -ChildPath "OneDriveActivityUserDetail-$($today.ToString("yyyy-MM-dd"))-$period.csv"
+    
+    try {
+        $existingReport = Get-ChildItem -Path $outputPath -ErrorAction Stop
+        if ($existingReport) {
+            return Import-Csv $outputPath  
+        }
+    }
+    catch { 
+        #Get-MgReportOneDriveUsageAccountDetail -Period $period -OutFile $outputPath
+        Get-MgReportOneDriveActivityUserDetail -Period $period -OutFile $outputPath
+        return Import-Csv $outputPath
+    }  
+}
+
+function PullSPOUsageData ($period) {
+    $today = Get-Date
+    $outputPath = Join-Path -Path $dataFolder -ChildPath "SharePointActivityUserDetail-$($today.ToString("yyyy-MM-dd"))-$period.csv"
+
+    try {
+        $existingReport = Get-ChildItem -Path $outputPath -ErrorAction Stop
+        if ($existingReport) {
+            return Import-Csv $outputPath  
+        }
+    } catch {
+        #Get-MgReportSharePointSiteUsageDetail -Period $period -OutFile $outputPath
+        Get-MgReportSharePointActivityUserDetail -Period $period -OutFile $outputPath
+        return Import-Csv $outputPath
     }
 }
 
@@ -278,6 +334,18 @@ function GetUsersTotalAppUsage($userAppData, $upn) {
     return $usersTotalAppUsage
 }
 
+function GetValueFromDataForUser($data, $upn, $property, $searchProperty = "User Principal Name") {
+    if ($upn -eq "alex@groverale.onmicrosoft.com")
+    {
+        Write-Host "Getting value for $property for $upn"
+    }
+    $usersData = $data | where { $_.$searchProperty -eq $upn }
+    if ($null -eq $usersData.$property) {
+        return 0
+    }
+    return $usersData.$property
+}
+
 ##############################################
 # Main
 ##############################################
@@ -286,7 +354,14 @@ ConnectToMSGraph
 
 PullAppUsageData
 
-#PullEmailUsageData
+if ($deepAnalysis)
+{
+    $emailData = PullEmailUsageData -period $period
+
+    $oneDriveData = PullOneDriveUsageData -period $period
+    
+    $spoData = PullSPOUsageData -period $period
+}
 
 $users = GetUsersToCheck
 
@@ -294,7 +369,7 @@ $users = GetUsersToCheck
 $combinedData = CombineAndTransformData
 
 # Get Total days were of data
-$files = Get-ChildItem -Path $dataFolder -Filter *.csv
+$files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
 $totalDaysOfData = $files.Count
 
 ## Go through each user and filter the data by user
@@ -311,7 +386,16 @@ foreach($user in $users) {
     ## Is the user licensed for copilot
     $usersTotalAppUsage.Add("LicensedForCopilot", (IsUserLicensedForCopilot -userId $user.Id))
 
-    ## Emails Read and Eamil Sent
+    if ($deepAnalysis)
+    {
+        $usersTotalAppUsage.Add("DeepAnalysisPeriod", $period)
+
+        $usersTotalAppUsage.Add("EmailsSentInPeriod", (GetValueFromDataForUser -data $emailData -upn $user.UserPrincipalName -property 'Send Count'))
+
+        $usersTotalAppUsage.Add("ActiveFilesInOneDriveInPeriod", (GetValueFromDataForUser -data $oneDriveData -upn $user.UserPrincipalName -property 'Viewed Or Edited File Count'))
+
+        #$usersTotalAppUsage.Add("ActiveFilesInSPOInPeriod", (GetValueFromDataForUser -data $spoData -upn $user.UserPrincipalName -property 'Active File Count'))
+    }
 
     $allUsersTotalAppUsage += $usersTotalAppUsage
 }
