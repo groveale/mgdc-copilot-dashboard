@@ -20,12 +20,13 @@
 # - DeepAnalysisPeriod (Period the data was collected for e.g. D30)
 #
 # This report can be used to understand heavy users of M365. Aka good candidates for Copilot.
+#
+# This script will run but will not be able to tie up usage to user if masking is enabled
 #              
 # Todo:
 # - Add support for users total Teams Meetings / Chats [Summarization]
 # - Add support for users MSSearch queries (may not be possible) [Content Search]
 # - Add support for users SPO active files (report is currently unavalible) [Content generation]
-# - Check support if masking is enabled
 #
 # Alex Grover - alexgrover@microsoft.com
 #
