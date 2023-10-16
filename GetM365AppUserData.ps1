@@ -34,6 +34,7 @@
 # 2023-09-27 - Initial version
 # 2023-10-03 - Fixed bug in returning user platform usage
 # 2023-10-03 - Added deeper analysis options for Emails Sent and Active Files in OneDrive
+# 2023-10-16 - Removed need to load each user to check license, this is done with another report
 #
 #
 ##############################################
