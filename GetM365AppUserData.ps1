@@ -59,7 +59,7 @@ catch {
 ##############################################
 
 # Auth
-$delegatedAuth = $true                 # If true, delegated auth will be used. If false, app only auth will be used
+$delegatedAuth = $false                 # If true, delegated auth will be used. If false, app only auth will be used
 
 $clientId = "38acafba-2eb6-4510-848e-070b493ea4dc"
 $tenantId = "groverale.onmicrosoft.com"
@@ -79,10 +79,10 @@ $checkAllLicensedUsers = $false         # If true, only users with licenses in t
 $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
 
 # Licenses to check
-$licenseSKUs = @(
-    "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
-    "c7df2760-2c81-4ef7-b578-5b5392b571df", # Microsoft 365 E5
-    "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
+$productSKUs = @(
+    "MICROSOFT 365 E5"          # "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
+    "MICROSOFT 365 E5"          # "c7df2760-2c81-4ef7-b578-5b5392b571df", # Microsoft 365 E5
+    "OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
 )
 
 # Deeper Analysis
@@ -124,6 +124,22 @@ function Get-AppUserDetailsForDate($date) {
         Write-Error "Error getting app user details for date $date - $($_.Exception.Message)"
         return $false
     }
+}
+
+function Get-UserDetail() {
+    try {
+        $today = Get-Date
+        $dateString = $today.ToString("yyyy-MM-dd")
+        $outputPath = Join-Path -Path $dataFolder -ChildPath "M365UserDetailReport-$dateString.csv"
+        Get-MgReportOffice365ActiveUserDetail -Period D7 -OutFile $outputPath
+        ## Import data and return
+        return Import-Csv -Path $outputPath
+    }
+    catch {
+        Write-Error "Error getting user details for date $date - $($_.Exception.Message)"
+        return $false
+    }
+    
 }
 
 function Get-GetExchangeData($date) {
@@ -224,23 +240,31 @@ function PullSPOUsageData ($period) {
     }
 }
 
-function GetUsersToCheck {
+function GetUsersToCheck ($userDetailsReportGraphData) {
 
     $users = @()
 
     if ($checkAllUsers) {
-        return Get-MgUser -All -Property UserPrincipalName, Id
+        ## v1.0 method of getting users
+        #return Get-MgUser -All -Property UserPrincipalName, Id
+
+        ## v1.1 method of getting users
+        $users = $userDetailsReportGraphData | Select -Property "User Principal Name", "Assigned Products"
+        return $users
     }
 
     if ($checkAllLicensedUsers) {
-        $allUsers = Get-MgUser -All -Property UserPrincipalName, Id
-        foreach($user in $allUsers) {
-            if (IsUserLicensedForCopilot -userId $user.Id)
-            {
-                $users += $user
-            }
-        }
-        return $users
+        # $allUsers = Get-MgUser -All -Property UserPrincipalName, Id
+        # foreach($user in $allUsers) {
+        #     if (IsUserLicensedForCopilot -userId $user.Id)
+        #     {
+        #         $users += $user
+        #     }
+        # }
+        # return $users
+
+        ## v1.1 method of getting users
+        return $userDetailsReportGraphData | where { IsUserLicensedForCopilot2 -userFromGraphReport $_ } | Select -Property "User Principal Name", "Assigned Products"
     }
     
     if (-not (Test-Path -Path $usersToCheckPath)) {
@@ -251,7 +275,7 @@ function GetUsersToCheck {
     $usersToCheck = Get-Content -Path $usersToCheckPath
     foreach($user in $usersToCheck) {
         $user = $user.Trim()
-        $user = Get-MgUser -UserId $user -Property UserPrincipalName, Id
+        $user = $userDetailsReportGraphData | where { $_.'User Principal Name' -eq $user } | Select -Property "User Principal Name", "Assigned Products"
         if($user) {
             $users += $user
         }
@@ -264,6 +288,21 @@ function IsUserLicensedForCopilot($userId) {
     $licenses = Get-MgUserLicenseDetail -UserId $userId
     foreach($license in $licenses) {
         if($licenseSKUs.Contains($license.SkuId)) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function IsUserLicensedForCopilot2($userFromGraphReport) {
+    
+    # Sameple produc string 'POWER VIRTUAL AGENTS VIRAL TRIAL+OFFICE 365 E3 DEVELOPER+MICROSOFT POWER APPS PLAN 2 TRIAL+MICROSOFT FABRIC (FREE)'
+    # Each produc string is seperated by a '+'
+    $products = ($userFromGraphReport.'Assigned Products').Split('+')
+
+    foreach($product in $products) {
+        if($productSKUs.Contains($product)) {
             return $true
         }
     }
@@ -364,7 +403,14 @@ if ($deepAnalysis)
     $spoData = PullSPOUsageData -period $period
 }
 
-$users = GetUsersToCheck
+$userDetailsReportGraphData = Get-UserDetail
+
+if ($userDetailsReportGraphData -eq $false) {
+    Write-Error "Error getting user details report data"
+    Exit
+}
+
+$users = GetUsersToCheck -userDetailsReportGraphData $userDetailsReportGraphData
 
 ## Now the data part
 $combinedData = CombineAndTransformData
@@ -376,24 +422,24 @@ $totalDaysOfData = $files.Count
 ## Go through each user and filter the data by user
 $allUsersTotalAppUsage = @()
 foreach($user in $users) {
-    $userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.UserPrincipalName }
+    $userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
     
     ## Go through each day record and check if the user has used the app
-    $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.UserPrincipalName
+    $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.'User Principal Name'
 
     ## Add total days of data
     $usersTotalAppUsage.Add("TotalDaysOfData", $totalDaysOfData)
 
     ## Is the user licensed for copilot
-    $usersTotalAppUsage.Add("LicensedForCopilot", (IsUserLicensedForCopilot -userId $user.Id))
+    $usersTotalAppUsage.Add("LicensedForCopilot", (IsUserLicensedForCopilot2 -userFromGraphReport $user))
 
     if ($deepAnalysis)
     {
         $usersTotalAppUsage.Add("DeepAnalysisPeriod", $period)
 
-        $usersTotalAppUsage.Add("EmailsSentInPeriod", (GetValueFromDataForUser -data $emailData -upn $user.UserPrincipalName -property 'Send Count'))
+        $usersTotalAppUsage.Add("EmailsSentInPeriod", (GetValueFromDataForUser -data $emailData -upn $user.'User Principal Name' -property 'Send Count'))
 
-        $usersTotalAppUsage.Add("ActiveFilesInOneDriveInPeriod", (GetValueFromDataForUser -data $oneDriveData -upn $user.UserPrincipalName -property 'Viewed Or Edited File Count'))
+        $usersTotalAppUsage.Add("ActiveFilesInOneDriveInPeriod", (GetValueFromDataForUser -data $oneDriveData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count'))
 
         #$usersTotalAppUsage.Add("ActiveFilesInSPOInPeriod", (GetValueFromDataForUser -data $spoData -upn $user.UserPrincipalName -property 'Active File Count'))
     }
