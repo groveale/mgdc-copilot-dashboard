@@ -76,14 +76,14 @@ $daysToGoBack = 28
 
 # Users to check config
 $checkAllUsers = $true                 # If true, all users in the tenant will be checked
-$checkAllLicensedUsers = $false         # If true, only users with licenses in the $licenseSKUs array will be checked
+$checkAllLicensedUsers = $true         # If true, only users with licenses in the $licenseSKUs array will be checked
 $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
 
 # Licenses to check
 $productSKUs = @(
-    "MICROSOFT 365 E5"          # "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
+    "MICROSOFT 365 E3"          # "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
     "MICROSOFT 365 E5"          # "c7df2760-2c81-4ef7-b578-5b5392b571df", # Microsoft 365 E5
-    "OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
+    #"OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
 )
 
 # Deeper Analysis
