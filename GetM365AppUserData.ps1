@@ -35,7 +35,7 @@
 # 2023-10-03 - Fixed bug in returning user platform usage
 # 2023-10-03 - Added deeper analysis options for Emails Sent and Active Files in OneDrive
 # 2023-10-16 - Removed need to load each user to check license, this is done with another report
-# 2023-10-17 - Flushing the output to avoid memory expections for large tenants
+# 2023-10-17 - Flushing the output to avoid memory expections for large tenants, added grouping to help with memory exceptions
 #
 #
 ##############################################
@@ -391,6 +391,10 @@ function GetValueFromDataForUser($data, $upn, $property, $searchProperty = "User
 # Main
 ##############################################
 
+## Initilaise the stopwatch
+$stopWatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+
 ConnectToMSGraph
 
 PullAppUsageData
@@ -426,15 +430,23 @@ $allUsersTotalAppUsage = @()
 ## Initilaise the CSV
 $allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Force
 
+# Grouping by user principal name
+Write-Host "Grouping data by user principal name"
+$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
+Write-Host "Finished grouping"
+
 # Initilaise progress bar
 cls
 $currentItem = 0
 $percent = 0
 Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
- 
 
 foreach($user in $users) {
-    $userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
+
+    $userAppData = ($allUsersAppData | where { $_.Name -eq 'alex@groverale.onmicrosoft.com' }).Group
+
+    #$userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
+    
     
     ## Go through each day record and check if the user has used the app
     $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.'User Principal Name'
@@ -464,3 +476,5 @@ foreach($user in $users) {
     Write-Progress -Activity "Processed User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
 
 }
+
+Write-Output "Done: $($stopWatch.Elapsed.ToString())"
