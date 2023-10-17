@@ -35,6 +35,7 @@
 # 2023-10-03 - Fixed bug in returning user platform usage
 # 2023-10-03 - Added deeper analysis options for Emails Sent and Active Files in OneDrive
 # 2023-10-16 - Removed need to load each user to check license, this is done with another report
+# 2023-10-17 - Flushing the output to avoid memory expections for large tenants
 #
 #
 ##############################################
@@ -51,7 +52,6 @@ catch {
 }
 
 # Graph Permissions
-# User.Read.All
 # Reports.Read.All
 
 
@@ -83,7 +83,7 @@ $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licens
 $productSKUs = @(
     "MICROSOFT 365 E3"          # "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
     "MICROSOFT 365 E5"          # "c7df2760-2c81-4ef7-b578-5b5392b571df", # Microsoft 365 E5
-    #"OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
+    "OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
 )
 
 # Deeper Analysis
@@ -422,6 +422,17 @@ $totalDaysOfData = $files.Count
 
 ## Go through each user and filter the data by user
 $allUsersTotalAppUsage = @()
+
+## Initilaise the CSV
+$allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Force
+
+# Initilaise progress bar
+cls
+$currentItem = 0
+$percent = 0
+Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
+ 
+
 foreach($user in $users) {
     $userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
     
@@ -445,8 +456,11 @@ foreach($user in $users) {
         #$usersTotalAppUsage.Add("ActiveFilesInSPOInPeriod", (GetValueFromDataForUser -data $spoData -upn $user.UserPrincipalName -property 'Active File Count'))
     }
 
-    $allUsersTotalAppUsage += $usersTotalAppUsage
-}
+    $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
 
-## Output the data
-$allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation
+    ## Update progress bar
+    $currentItem++
+    $percent = [Math]::Round(($currentItem / $users.Count) * 100)
+    Write-Progress -Activity "Processed User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
+
+}
