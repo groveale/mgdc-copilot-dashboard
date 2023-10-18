@@ -75,7 +75,7 @@ $dataFolder = "Data\"
 $daysToGoBack = 28
 
 # Users to check config
-$checkAllUsers = $true                 # If true, all users in the tenant will be checked
+$checkAllUsers = $false                 # If true, all users in the tenant will be checked
 $checkAllLicensedUsers = $true         # If true, only users with licenses in the $licenseSKUs array will be checked
 $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
 
@@ -87,7 +87,7 @@ $productSKUs = @(
 )
 
 # Deeper Analysis
-$deepAnalysis = $true                    # If true, deeper analysis will be done (Email, OneDrive)
+$deepAnalysis = $false                    # If true, deeper analysis will be done (Email, OneDrive)
 $period = "D30"                          # Period to get data for (D7 = 7 days, D30 = 30 days, D90 = 90 days, D180 = 180 days)
 
 ##############################################
