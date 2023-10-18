@@ -443,7 +443,7 @@ Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Statu
 
 foreach($user in $users) {
 
-    $userAppData = ($allUsersAppData | where { $_.Name -eq 'alex@groverale.onmicrosoft.com' }).Group
+    $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
 
     #$userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
     
