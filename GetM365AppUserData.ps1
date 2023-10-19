@@ -27,6 +27,7 @@
 # - Add support for users total Teams Meetings / Chats [Summarization]
 # - Add support for users MSSearch queries (may not be possible) [Content Search]
 # - Add support for users SPO active files (report is currently unavalible) [Content generation]
+# - Update app usage method to pull data for most recent three reports. (These will be epty)
 #
 # Alex Grover - alexgrover@microsoft.com
 #
@@ -44,7 +45,6 @@
 ## Requires the following modules:
 try {
     Import-Module Microsoft.Graph.Reports
-    Import-Module Microsoft.Graph.Users
 }
 catch {
     Write-Error "Error importing modules required modules - $($Error[0].Exception.Message))"
@@ -69,10 +69,10 @@ $thumbprint = "72A385EF67B35E1DFBACA89180B7B3C8F97453D7"
 # Log file location (timestamped with script start time)
 $timeStamp = Get-Date -Format "yyyyMMddHHmmss"
 $reportFileLocation = "Output\M365AppUsageReportTotals-$timeStamp.csv"
-$dataFolder = "Data\"
+$dataFolder = "TestData\"
 
 # Days to go back (max is 28)
-$daysToGoBack = 28
+$daysToGoBack = 2
 
 # Users to check config
 $checkAllUsers = $false                 # If true, all users in the tenant will be checked
@@ -81,9 +81,9 @@ $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licens
 
 # Licenses to check
 $productSKUs = @(
-    "MICROSOFT 365 E3"          # "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
+ #   "MICROSOFT 365 E3"          # "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
     "MICROSOFT 365 E5"          # "c7df2760-2c81-4ef7-b578-5b5392b571df", # Microsoft 365 E5
-    "OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
+   # "OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
 )
 
 # Deeper Analysis
@@ -132,6 +132,12 @@ function Get-UserDetail() {
         $today = Get-Date
         $dateString = $today.ToString("yyyy-MM-dd")
         $outputPath = Join-Path -Path $dataFolder -ChildPath "M365UserDetailReport-$dateString.csv"
+        # Check if we already have the data for this date
+        $userData = Get-ChildItem -Path $dataFolder -Filter "M365UserDetailReport-$dateString.csv"
+        if($userData) {
+            Write-Host "Data already exists for date $today"
+            return Import-Csv -Path $outputPath
+        }
         Get-MgReportOffice365ActiveUserDetail -Period D7 -OutFile $outputPath
         ## Import data and return
         return Import-Csv -Path $outputPath
@@ -436,7 +442,7 @@ $allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
 Write-Host "Finished grouping"
 
 # Initilaise progress bar
-cls
+#cls
 $currentItem = 0
 $percent = 0
 Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
@@ -444,6 +450,11 @@ Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Statu
 foreach($user in $users) {
 
     $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
+
+    if ($null -eq $userAppData) {
+        Write-Warning "No data found for $($user.'User Principal Name')"
+        continue
+    }
 
     #$userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
     
