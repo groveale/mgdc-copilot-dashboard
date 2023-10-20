@@ -318,8 +318,9 @@ function IsUserLicensedForCopilot2($userFromGraphReport) {
 }
 
 function GetUsersTotalAppUsage($userAppData, $upn) {
-    $usersTotalAppUsage = @{}
-    $usersTotalAppUsage.Add("User Principal Name", $upn)
+    $usersTotalAppUsage = New-Object -TypeName PSObject -Property @{
+        "User Principal Name" = $upn
+    }
 
     ## If we get a single day where the user has used the app from a platform, 
     ## we will assume they are a user of that platform
@@ -329,10 +330,11 @@ function GetUsersTotalAppUsage($userAppData, $upn) {
     $webUser = ($userAppData | where { $_.Web -eq "Yes" }).Length -gt 0
 
     ## Add platform usage
-    $usersTotalAppUsage.Add("WindowsUser", $windowsUser)
-    $usersTotalAppUsage.Add("MacUser", $macUser)
-    $usersTotalAppUsage.Add("MobileUser", $mobileUser)
-    $usersTotalAppUsage.Add("WebUser", $webUser)
+
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "WindowsUser" -Value $windowsUser
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "MacUser" -Value $macUser
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "MobileUser" -Value $mobileUser
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "WebUser" -Value $webUser
 
     ## Daily app counts
     $outlookDailyUsageCount = 0
@@ -371,12 +373,12 @@ function GetUsersTotalAppUsage($userAppData, $upn) {
     }
 
     ## Add daily app counts
-    $usersTotalAppUsage.Add("OutlookUsageDays", $outlookDailyUsageCount)
-    $usersTotalAppUsage.Add("WordUsageDays", $wordDailyUsageCount)
-    $usersTotalAppUsage.Add("ExcelUsageDays", $excelDailyUsageCount)
-    $usersTotalAppUsage.Add("PowerPointUsageDays", $powerpointDailyUsageCount)
-    $usersTotalAppUsage.Add("TeamsUsageDays", $teamsDailyUsageCount)
-    $usersTotalAppUsage.Add("OneNoteUsageDays", $onenoteDailyUsageCount)
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "OutlookUsageDays" -Value $outlookDailyUsageCount
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "WordUsageDays" -Value $wordDailyUsageCount
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ExcelUsageDays" -Value $excelDailyUsageCount
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "PowerPointUsageDays" -Value $powerpointDailyUsageCount
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TeamsUsageDays" -Value $teamsDailyUsageCount
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "OneNoteUsageDays" -Value $onenoteDailyUsageCount
     
     return $usersTotalAppUsage
 }
@@ -439,6 +441,7 @@ $allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation
 # Grouping by user principal name
 Write-Host "Grouping data by user principal name"
 $allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
+$allUsersAppData
 Write-Host "Finished grouping"
 
 # Initilaise progress bar
@@ -452,8 +455,8 @@ foreach($user in $users) {
     $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
 
     if ($null -eq $userAppData) {
-        Write-Warning "No data found for $($user.'User Principal Name')"
-        continue
+        #Write-Warning "No data found for $($user.'User Principal Name')"
+        #continue
     }
 
     #$userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
@@ -463,10 +466,11 @@ foreach($user in $users) {
     $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.'User Principal Name'
 
     ## Add total days of data
-    $usersTotalAppUsage.Add("TotalDaysOfData", $totalDaysOfData)
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TotalDaysOfData" -Value $totalDaysOfData
 
     ## Is the user licensed for copilot
-    $usersTotalAppUsage.Add("LicensedForCopilot", (IsUserLicensedForCopilot2 -userFromGraphReport $user))
+    $licened = IsUserLicensedForCopilot2 -userFromGraphReport $user
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "LicensedForCopilot" -Value $licened
 
     if ($deepAnalysis)
     {
@@ -478,6 +482,9 @@ foreach($user in $users) {
 
         #$usersTotalAppUsage.Add("ActiveFilesInSPOInPeriod", (GetValueFromDataForUser -data $spoData -upn $user.UserPrincipalName -property 'Active File Count'))
     }
+    
+    # Convert the hashtable to an object
+    Write-Host $usersTotalAppUsage
 
     $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
 
