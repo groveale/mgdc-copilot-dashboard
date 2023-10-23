@@ -12,11 +12,13 @@
 # - PowerPointUsageDays (Number of days PowerPoint was used)
 # - TeamsUsageDays (Number of days Teams was used)
 # - OneNoteUsageDays (Number of days OneNote was used)
-# - TotalDaysOfData (Total number of days of data)
+# - DaysOfData (Total number of days of data for the user (will be less than the days to go back if the user was not active in the period))
+# - TotalDaysOfData (Total number of days of data in the complete data set)
 # - LicensedForCopilot (If the users license is cable of adding Copilot e.g. E3 / E5)
 # - EmailsSentInPeriod (Number of emails sent in the period)
 # - ActiveFilesInSPOInPeriod (Number of active files in SPO in the period)
 # - ActiveFilesInOneDriveInPeriod (Number of active files in OneDrive in the period)
+# - TotalAudioTimeMins(Total Aduio time of meetings in teams)
 # - DeepAnalysisPeriod (Period the data was collected for e.g. D30)
 #
 # This report can be used to understand heavy users of M365. Aka good candidates for Copilot.
@@ -24,10 +26,8 @@
 # This script will run but will not be able to tie up usage to user if masking is enabled
 #              
 # Todo:
-# - Add support for users total Teams Meetings / Chats [Summarization]
 # - Add support for users MSSearch queries (may not be possible) [Content Search]
-# - Add support for users SPO active files (report is currently unavalible) [Content generation]
-# - Update app usage method to pull data for most recent three reports. (These will be epty)
+#
 #
 # Alex Grover - alexgrover@microsoft.com
 #
@@ -37,7 +37,7 @@
 # 2023-10-03 - Added deeper analysis options for Emails Sent and Active Files in OneDrive
 # 2023-10-16 - Removed need to load each user to check license, this is done with another report
 # 2023-10-17 - Flushing the output to avoid memory expections for large tenants, added grouping to help with memory exceptions
-#
+# 2023-10-23 - Updated data collection method to pull data for previously collected days which are empty, added DaysOfData value to output, added total aduio time for team calls
 #
 ##############################################
 # Dependencies
@@ -69,10 +69,10 @@ $thumbprint = "72A385EF67B35E1DFBACA89180B7B3C8F97453D7"
 # Log file location (timestamped with script start time)
 $timeStamp = Get-Date -Format "yyyyMMddHHmmss"
 $reportFileLocation = "Output\M365AppUsageReportTotals-$timeStamp.csv"
-$dataFolder = "TestData\"
+$dataFolder = "Data\"
 
 # Days to go back (max is 28)
-$daysToGoBack = 2
+$daysToGoBack = 28
 
 # Users to check config
 $checkAllUsers = $false                 # If true, all users in the tenant will be checked
@@ -81,14 +81,14 @@ $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licens
 
 # Licenses to check
 $productSKUs = @(
- #   "MICROSOFT 365 E3"          # "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
+    "MICROSOFT 365 E3"          # "6fd2c87f-b296-42f0-b197-1e91e994b900", # Microsoft 365 E3
     "MICROSOFT 365 E5"          # "c7df2760-2c81-4ef7-b578-5b5392b571df", # Microsoft 365 E5
-   # "OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
+    "OFFICE 365 E3 DEVELOPER"   # "189a915c-fe4f-4ffa-bde4-85b9628d07a0"  # DeveloperPack (Gives E3 license)
 )
 
 # Deeper Analysis
-$deepAnalysis = $false                    # If true, deeper analysis will be done (Email, OneDrive)
-$period = "D30"                          # Period to get data for (D7 = 7 days, D30 = 30 days, D90 = 90 days, D180 = 180 days)
+$deepAnalysis = $true                    # If true, deeper analysis will be done (Email, OneDrive)
+$period = "D90"                          # Period to get data for (D7 = 7 days, D30 = 30 days, D90 = 90 days, D180 = 180 days)
 
 ##############################################
 # Functions
@@ -178,19 +178,19 @@ function PullAppUsageData {
     for($i = 0; $i -lt $daysToGoBack; $i++) {
         $today = Get-Date
         $date = $today.AddDays(-$i)
-    
-        # If 2 days ago or less allways get new data
-        if($i -le 2) {
-            Write-Host "Getting app user details for date $date"
-            Get-AppUserDetailsForDate($date)
-            continue
-        }
-    
+        
         # Check if we already have the data for this date
         $appData = Get-ChildItem -Path $dataFolder -Filter "M365AppUserReport-$($date.ToString("yyyy-MM-dd")).csv"
         if($appData) {
-            Write-Host "Data already exists for date $date"
-            continue
+
+            ## Get first two lines of the file
+            $firstTwoLines = Get-Content -Path $appData.FullName -TotalCount 2
+            if ($firstTwoLines.Length -eq 2) {
+                Write-Host "Data already exists for date $date"
+                continue
+            }
+
+            ## If length is not two then we have one line that is the header. So overwrite the file as empty
         }
     
         Write-Host "Getting app user details for date $date"
@@ -243,6 +243,21 @@ function PullSPOUsageData ($period) {
     } catch {
         #Get-MgReportSharePointSiteUsageDetail -Period $period -OutFile $outputPath
         Get-MgReportSharePointActivityUserDetail -Period $period -OutFile $outputPath
+        return Import-Csv $outputPath
+    }
+}
+
+function PullTeamUsageData ($period) {
+    $today = Get-Date
+    $outputPath = Join-Path -Path $dataFolder -ChildPath "TeamActivityUserDetail-$($today.ToString("yyyy-MM-dd"))-$period.csv"
+
+    try {
+        $existingReport = Get-ChildItem -Path $outputPath -ErrorAction Stop
+        if ($existingReport) {
+            return Import-Csv $outputPath  
+        }
+    } catch {
+        Get-MgReportTeamUserActivityUserDetail -Period $period -OutFile $outputPath
         return Import-Csv $outputPath
     }
 }
@@ -344,6 +359,8 @@ function GetUsersTotalAppUsage($userAppData, $upn) {
     $teamsDailyUsageCount = 0
     $onenoteDailyUsageCount = 0
 
+    $daysOfData = $userAppData.Count
+
     ## Go through each day and count the app usage
     foreach($day in $userAppData) {
 
@@ -379,6 +396,9 @@ function GetUsersTotalAppUsage($userAppData, $upn) {
     $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "PowerPointUsageDays" -Value $powerpointDailyUsageCount
     $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TeamsUsageDays" -Value $teamsDailyUsageCount
     $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "OneNoteUsageDays" -Value $onenoteDailyUsageCount
+
+    ## Add total days of data for that user
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "DaysOfData" -Value $daysOfData
     
     return $usersTotalAppUsage
 }
@@ -414,6 +434,8 @@ if ($deepAnalysis)
     $oneDriveData = PullOneDriveUsageData -period $period
     
     $spoData = PullSPOUsageData -period $period
+
+    $teamData = PullTeamUsageData -period $period
 }
 
 $userDetailsReportGraphData = Get-UserDetail
@@ -438,10 +460,10 @@ $allUsersTotalAppUsage = @()
 ## Initilaise the CSV
 $allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Force
 
-# Grouping by user principal name
-Write-Host "Grouping data by user principal name"
+# Grouping by user principal name - memory intensive
+Write-Host "Grouping data by user principal name... please wait"
 $allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
-$allUsersAppData
+#$allUsersAppData
 Write-Host "Finished grouping"
 
 # Initilaise progress bar
@@ -454,14 +476,6 @@ foreach($user in $users) {
 
     $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
 
-    if ($null -eq $userAppData) {
-        #Write-Warning "No data found for $($user.'User Principal Name')"
-        #continue
-    }
-
-    #$userAppData = $combinedData | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
-    
-    
     ## Go through each day record and check if the user has used the app
     $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.'User Principal Name'
 
@@ -474,17 +488,16 @@ foreach($user in $users) {
 
     if ($deepAnalysis)
     {
-        $usersTotalAppUsage.Add("DeepAnalysisPeriod", $period)
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "DeepAnalysisPeriod" -Value $period
 
-        $usersTotalAppUsage.Add("EmailsSentInPeriod", (GetValueFromDataForUser -data $emailData -upn $user.'User Principal Name' -property 'Send Count'))
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "EmailsSentInPeriod" -Value (GetValueFromDataForUser -data $emailData -upn $user.'User Principal Name' -property 'Send Count')
 
-        $usersTotalAppUsage.Add("ActiveFilesInOneDriveInPeriod", (GetValueFromDataForUser -data $oneDriveData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count'))
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ActiveFilesInOneDriveInPeriod" -Value (GetValueFromDataForUser -data $oneDriveData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count')
 
-        #$usersTotalAppUsage.Add("ActiveFilesInSPOInPeriod", (GetValueFromDataForUser -data $spoData -upn $user.UserPrincipalName -property 'Active File Count'))
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ActiveFilesInSPOInPeriod" -Value (GetValueFromDataForUser -data $spoData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count')
+
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TotalAudioTimeMins" -Value ([Math]::Round((GetValueFromDataForUser -data $teamData -upn $user.'User Principal Name' -property 'Audio Duration In Seconds') / 60))
     }
-    
-    # Convert the hashtable to an object
-    Write-Host $usersTotalAppUsage
 
     $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
 
