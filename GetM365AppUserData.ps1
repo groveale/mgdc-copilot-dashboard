@@ -415,6 +415,16 @@ function GetValueFromDataForUser($data, $upn, $property, $searchProperty = "User
     return $usersData.$property
 }
 
+function GetUsersAppDataMemoryEfficient($user, $files) {
+    $userAppData = @()
+    foreach($file in $files) {
+        $data = Import-Csv -Path $file.FullName
+        $userAppData += $data | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
+    }
+
+    return $userAppData
+}
+
 ##############################################
 # Main
 ##############################################
@@ -448,7 +458,7 @@ if ($userDetailsReportGraphData -eq $false) {
 $users = GetUsersToCheck -userDetailsReportGraphData $userDetailsReportGraphData
 
 ## Now the data part
-$combinedData = CombineAndTransformData
+##$combinedData = CombineAndTransformData # Too intensive on memory
 
 # Get Total days were of data
 $files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
@@ -461,10 +471,12 @@ $allUsersTotalAppUsage = @()
 $allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Force
 
 # Grouping by user principal name - memory intensive
-Write-Host "Grouping data by user principal name... please wait"
-$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
+#Write-Host "Grouping data by user principal name... please wait"
+#$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
 #$allUsersAppData
-Write-Host "Finished grouping"
+#Write-Host "Finished grouping"
+
+
 
 # Initilaise progress bar
 #cls
@@ -473,6 +485,10 @@ $percent = 0
 Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
 
 foreach($user in $users) {
+
+    ## Get the app data for the user
+    ## We will go through each file
+    $userAppData = GetUsersAppDataMemoryEfficient -user $user -files $files
 
     $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
 
