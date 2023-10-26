@@ -69,13 +69,13 @@ $thumbprint = "72A385EF67B35E1DFBACA89180B7B3C8F97453D7"
 # Log file location (timestamped with script start time)
 $timeStamp = Get-Date -Format "yyyyMMddHHmmss"
 $reportFileLocation = "Output\M365AppUsageReportTotals-$timeStamp.csv"
-$dataFolder = "Data\"
+$dataFolder = "GeneratedData\"
 
 # Days to go back (max is 28)
 $daysToGoBack = 28
 
 # Users to check config
-$checkAllUsers = $false                 # If true, all users in the tenant will be checked
+$checkAllUsers = $true                 # If true, all users in the tenant will be checked
 $checkAllLicensedUsers = $true         # If true, only users with licenses in the $licenseSKUs array will be checked
 $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
 
@@ -87,7 +87,7 @@ $productSKUs = @(
 )
 
 # Deeper Analysis
-$deepAnalysis = $true                    # If true, deeper analysis will be done (Email, OneDrive)
+$deepAnalysis = $false                    # If true, deeper analysis will be done (Email, OneDrive)
 $period = "D90"                          # Period to get data for (D7 = 7 days, D30 = 30 days, D90 = 90 days, D180 = 180 days)
 
 ##############################################
@@ -471,10 +471,10 @@ $allUsersTotalAppUsage = @()
 $allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Force
 
 # Grouping by user principal name - memory intensive
-#Write-Host "Grouping data by user principal name... please wait"
-#$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
+Write-Host "Grouping data by user principal name... please wait"
+$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
 #$allUsersAppData
-#Write-Host "Finished grouping"
+Write-Host "Finished grouping"
 
 
 
@@ -488,7 +488,7 @@ foreach($user in $users) {
 
     ## Get the app data for the user
     ## We will go through each file
-    $userAppData = GetUsersAppDataMemoryEfficient -user $user -files $files
+    #$userAppData = GetUsersAppDataMemoryEfficient -user $user -files $files
 
     $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
 
