@@ -579,7 +579,6 @@ Write-Host "Finished grouping"
 
 # Initilaise progress bar
 #cls
-$maxThreads = 4
 $today = Get-Date
 $currentItem = 0
 $percent = 0
