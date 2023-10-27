@@ -9,9 +9,9 @@ namespace GenerateSampleData
 
         static void Main(string[] args)
         {
-            int userCount = 100000;
+            int userCount = 1000;
             int days = 30;
-            string filePath = "C:\\Users\\alexgrover\\source\\repos\\mgdc-copilot-dashboard\\GeneratedData";
+            string filePath = "C:\\Users\\alexgrover\\source\\repos\\mgdc-copilot-dashboard\\GeneratedData\\1K";
 
             var today = DateTime.Now;
 
@@ -59,40 +59,40 @@ namespace GenerateSampleData
                     reportItem.LastActivationDate = reportDate.AddDays(-i).ToString("yyyy-MM-dd");
                     reportItem.LastActivityDate = reportDate.AddDays(-i).ToString("yyyy-MM-dd");
                     reportItem.ReportPeriod = 30;
-                    reportItem.Windows = Faker.Boolean.Random();
-                    reportItem.Mac = Faker.Boolean.Random();
-                    reportItem.Mobile = Faker.Boolean.Random();
-                    reportItem.Web = Faker.Boolean.Random();
-                    reportItem.Outlook = Faker.Boolean.Random();
-                    reportItem.Word = Faker.Boolean.Random();
-                    reportItem.Excel = Faker.Boolean.Random();
-                    reportItem.PowerPoint = Faker.Boolean.Random();
-                    reportItem.OneNote = Faker.Boolean.Random();
-                    reportItem.Teams = Faker.Boolean.Random();
-                    reportItem.OutlookWindows = Faker.Boolean.Random();
-                    reportItem.WordWindows = Faker.Boolean.Random();
-                    reportItem.ExcelWindows = Faker.Boolean.Random();
-                    reportItem.PowerPointWindows = Faker.Boolean.Random();
-                    reportItem.OneNoteWindows = Faker.Boolean.Random();
-                    reportItem.TeamsWindows = Faker.Boolean.Random();
-                    reportItem.OutlookMac = Faker.Boolean.Random();
-                    reportItem.WordMac = Faker.Boolean.Random();
-                    reportItem.ExcelMac = Faker.Boolean.Random();
-                    reportItem.PowerPointMac = Faker.Boolean.Random();
-                    reportItem.OneNoteMac = Faker.Boolean.Random();
-                    reportItem.TeamsMac = Faker.Boolean.Random();
-                    reportItem.OutlookMobile = Faker.Boolean.Random();
-                    reportItem.WordMobile = Faker.Boolean.Random();
-                    reportItem.ExcelMobile = Faker.Boolean.Random();
-                    reportItem.PowerPointMobile = Faker.Boolean.Random();
-                    reportItem.OneNoteMobile = Faker.Boolean.Random();
-                    reportItem.TeamsMobile = Faker.Boolean.Random();
-                    reportItem.OutlookWeb = Faker.Boolean.Random();
-                    reportItem.WordWeb = Faker.Boolean.Random();
-                    reportItem.ExcelWeb = Faker.Boolean.Random();
-                    reportItem.PowerPointWeb = Faker.Boolean.Random();
-                    reportItem.OneNoteWeb = Faker.Boolean.Random();
-                    reportItem.TeamsWeb = Faker.Boolean.Random();
+                    reportItem.Windows = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.Mac = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.Mobile = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.Web = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.Outlook = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.Word = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.Excel = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.PowerPoint = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OneNote = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.Teams = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OutlookWindows = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.WordWindows = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.ExcelWindows = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.PowerPointWindows = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OneNoteWindows = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.TeamsWindows = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OutlookMac = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.WordMac = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.ExcelMac = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.PowerPointMac = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OneNoteMac = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.TeamsMac = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OutlookMobile = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.WordMobile = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.ExcelMobile = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.PowerPointMobile = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OneNoteMobile = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.TeamsMobile = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OutlookWeb = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.WordWeb = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.ExcelWeb = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.PowerPointWeb = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.OneNoteWeb = Faker.Boolean.Random() ? "Yes" : "No";
+                    reportItem.TeamsWeb = Faker.Boolean.Random() ? "Yes" : "No";
 
                     reportData.Add(reportItem);
                 }

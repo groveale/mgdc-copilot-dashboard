@@ -38,6 +38,7 @@
 # 2023-10-16 - Removed need to load each user to check license, this is done with another report
 # 2023-10-17 - Flushing the output to avoid memory expections for large tenants, added grouping to help with memory exceptions
 # 2023-10-23 - Updated data collection method to pull data for previously collected days which are empty, added DaysOfData value to output, added total aduio time for team calls
+# 2023-10-27 - Added support to append to existing report
 #
 ##############################################
 # Dependencies
@@ -69,7 +70,11 @@ $thumbprint = "72A385EF67B35E1DFBACA89180B7B3C8F97453D7"
 # Log file location (timestamped with script start time)
 $timeStamp = Get-Date -Format "yyyyMMddHHmmss"
 $reportFileLocation = "Output\M365AppUsageReportTotals-$timeStamp.csv"
-$dataFolder = "GeneratedData\"
+$dataFolder = "GeneratedData\1K\"
+
+# For when you want to append data to an existing report
+$appendToExistingReport = $true
+$existingReport = "C:\Users\alexgrover\source\repos\mgdc-copilot-dashboard\Output\M365AppUsageReportTotals-20231027153820.csv"
 
 # Days to go back (max is 28)
 $daysToGoBack = 28
@@ -163,12 +168,42 @@ function Get-GetExchangeData($date) {
     }
 }
 
-function CombineAndTransformData {
+function Get-DateFromFileName($fileName) {
+
+    # Define a regular expression pattern to match the date in the format yyyy-mm-dd
+    $pattern = "\d{4}-\d{2}-\d{2}"
+
+    # Use the [regex]::Matches method to find all matching substrings
+    $matches = [regex]::Matches($filename, $pattern)
+
+    if ($matches.Count -gt 0) {
+        $extracted_date = $matches[0].Value
+        return Get-Date -Date $extracted_date
+    } else {
+        return $null
+    }
+}
+
+function CombineAndTransformData($latestReportDate = $null) {
     $combinedData = @()
     $files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
     foreach($file in $files) {
-        $data = Import-Csv -Path $file.FullName
-        $combinedData += $data
+        if ($null -ne $latestReportDate) {
+
+            $reportDate = Get-DateFromFileName -fileName $file.Name
+            if ($null -ne $reportDate) {
+                if ($reportDate -gt $latestReportDate) {
+                    ## New data, add to combined data
+                    $data = Import-Csv -Path $file.FullName
+                    $combinedData += $data
+                }
+            }
+        }
+        else {
+            ## If no latest report date then just add all data
+            $data = Import-Csv -Path $file.FullName
+            $combinedData += $data
+        }
     }
 
     return $combinedData
@@ -332,9 +367,31 @@ function IsUserLicensedForCopilot2($userFromGraphReport) {
     return $false
 }
 
-function GetUsersTotalAppUsage($userAppData, $upn) {
-    $usersTotalAppUsage = New-Object -TypeName PSObject -Property @{
-        "User Principal Name" = $upn
+function UpdatePlatformUsage($usersTotalAppUsage, $memberName, $newValue) {
+    
+    if ($usersTotalAppUsage | Get-Member -Name $memberName -MemberType NoteProperty -ErrorAction SilentlyContinue) {
+        # We already have a property
+        # If current value is Yes then we don't want to update, but if value is No then we can update
+        if ($usersTotalAppUsage.$memberName -eq "Yes") {
+            ## do nothing
+        } else {
+            $usersTotalAppUsage.$memberName = $newValue
+        }
+    }
+    else {
+        ## No Member, add it
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name $memberName -Value $newValue
+    }
+}
+
+function GetUsersTotalAppUsage($userAppData, $upn, $existingReportData) {
+
+    if ($appendToExistingReport) {
+        $usersTotalAppUsage = $existingReportData | where { $_.'User Principal Name' -eq $upn }
+    } else {
+        $usersTotalAppUsage = New-Object -TypeName PSObject -Property @{
+            "User Principal Name" = $upn
+        }
     }
 
     ## If we get a single day where the user has used the app from a platform, 
@@ -345,21 +402,32 @@ function GetUsersTotalAppUsage($userAppData, $upn) {
     $webUser = ($userAppData | where { $_.Web -eq "Yes" }).Length -gt 0
 
     ## Add platform usage
-
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "WindowsUser" -Value $windowsUser
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "MacUser" -Value $macUser
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "MobileUser" -Value $mobileUser
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "WebUser" -Value $webUser
+    UpdatePlatformUsage -usersTotalAppUsage $usersTotalAppUsage -memberName "WindowsUser" -newValue $windowsUser
+    UpdatePlatformUsage -usersTotalAppUsage $usersTotalAppUsage -memberName "MacUser" -newValue $macUser
+    UpdatePlatformUsage -usersTotalAppUsage $usersTotalAppUsage -memberName "MobileUser" -newValue $mobileUser
+    UpdatePlatformUsage -usersTotalAppUsage $usersTotalAppUsage -memberName "WebUser" -newValue $webUser
 
     ## Daily app counts
-    $outlookDailyUsageCount = 0
-    $wordDailyUsageCount = 0
-    $excelDailyUsageCount = 0
-    $powerpointDailyUsageCount = 0
-    $teamsDailyUsageCount = 0
-    $onenoteDailyUsageCount = 0
+    if ($appendToExistingReport) {
+        $outlookDailyUsageCount = [int]$usersTotalAppUsage.OutlookUsageDays
+        $wordDailyUsageCount = [int]$usersTotalAppUsage.WordUsageDays
+        $excelDailyUsageCount = [int]$usersTotalAppUsage.ExcelUsageDays
+        $powerpointDailyUsageCount = [int]$usersTotalAppUsage.PowerPointUsageDays
+        $teamsDailyUsageCount = [int]$usersTotalAppUsage.TeamsUsageDays
+        $onenoteDailyUsageCount = [int]$usersTotalAppUsage.OneNoteUsageDays
 
-    $daysOfData = $userAppData.Count
+        $daysOfData = [int]$usersTotalAppUsage.DaysOfData + $userAppData.Count
+    } else {
+        $outlookDailyUsageCount = 0
+        $wordDailyUsageCount = 0
+        $excelDailyUsageCount = 0
+        $powerpointDailyUsageCount = 0
+        $teamsDailyUsageCount = 0
+        $onenoteDailyUsageCount = 0
+
+        $daysOfData = $userAppData.Count
+    }
+    
 
     ## Go through each day and count the app usage
     foreach($day in $userAppData) {
@@ -390,15 +458,15 @@ function GetUsersTotalAppUsage($userAppData, $upn) {
     }
 
     ## Add daily app counts
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "OutlookUsageDays" -Value $outlookDailyUsageCount
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "WordUsageDays" -Value $wordDailyUsageCount
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ExcelUsageDays" -Value $excelDailyUsageCount
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "PowerPointUsageDays" -Value $powerpointDailyUsageCount
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TeamsUsageDays" -Value $teamsDailyUsageCount
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "OneNoteUsageDays" -Value $onenoteDailyUsageCount
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "OutlookUsageDays" -Value $outlookDailyUsageCount -Force
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "WordUsageDays" -Value $wordDailyUsageCount -Force
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ExcelUsageDays" -Value $excelDailyUsageCount -Force
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "PowerPointUsageDays" -Value $powerpointDailyUsageCount -Force
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TeamsUsageDays" -Value $teamsDailyUsageCount -Force
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "OneNoteUsageDays" -Value $onenoteDailyUsageCount -Force
 
     ## Add total days of data for that user
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "DaysOfData" -Value $daysOfData
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "DaysOfData" -Value $daysOfData -Force
     
     return $usersTotalAppUsage
 }
@@ -415,14 +483,34 @@ function GetValueFromDataForUser($data, $upn, $property, $searchProperty = "User
     return $usersData.$property
 }
 
-function GetUsersAppDataMemoryEfficient($user, $files) {
-    $userAppData = @()
-    foreach($file in $files) {
-        $data = Import-Csv -Path $file.FullName
-        $userAppData += $data | where { $_.'User Principal Name' -eq $user.'User Principal Name' }
+function ProcessUser($user, $allUsersAppData, $totalDaysOfData, $emailData, $oneDriveData, $spoData, $teamData, $existingReportData) 
+{
+    $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
+
+    ## Go through each day record and check if the user has used the app
+    $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.'User Principal Name' -existingReportData $existingReportData
+
+    ## Add total days of data
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TotalDaysOfData" -Value $totalDaysOfData -Force
+
+    ## Is the user licensed for copilot
+    $licened = IsUserLicensedForCopilot2 -userFromGraphReport $user
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "LicensedForCopilot" -Value $licened -Force
+
+    if ($deepAnalysis)
+    {
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "DeepAnalysisPeriod" -Value $period -Force
+
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "EmailsSentInPeriod" -Value (GetValueFromDataForUser -data $emailData -upn $user.'User Principal Name' -property 'Send Count') -Force
+
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ActiveFilesInOneDriveInPeriod" -Value (GetValueFromDataForUser -data $oneDriveData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count') -Force
+
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ActiveFilesInSPOInPeriod" -Value (GetValueFromDataForUser -data $spoData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count') -Force
+
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TotalAudioTimeMins" -Value ([Math]::Round((GetValueFromDataForUser -data $teamData -upn $user.'User Principal Name' -property 'Audio Duration In Seconds') / 60)) -Force
     }
 
-    return $userAppData
+    return $usersTotalAppUsage
 }
 
 ##############################################
@@ -457,8 +545,20 @@ if ($userDetailsReportGraphData -eq $false) {
 
 $users = GetUsersToCheck -userDetailsReportGraphData $userDetailsReportGraphData
 
-## Now the data part
-##$combinedData = CombineAndTransformData # Too intensive on memory
+if ($appendToExistingReport -eq $true) {
+    ## Read in the report
+    $existingReportData = Import-Csv -Path $existingReport
+    $latestReportDateString = $existingReportData[0]."Report Refresh Date"
+    
+    $latestReportDate = Get-Date -Date $latestReportDateString
+    $combinedData = CombineAndTransformData -latestReportDate $latestReportDate
+}
+else {
+    ## Now the data part
+    $combinedData = CombineAndTransformData # Too intensive on memory
+}
+
+
 
 # Get Total days were of data
 $files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
@@ -477,9 +577,10 @@ $allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
 Write-Host "Finished grouping"
 
 
-
 # Initilaise progress bar
 #cls
+$maxThreads = 4
+$today = Get-Date
 $currentItem = 0
 $percent = 0
 Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
@@ -487,35 +588,10 @@ Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Statu
 foreach($user in $users) {
 
     ## Get the app data for the user
-    ## We will go through each file
-    #$userAppData = GetUsersAppDataMemoryEfficient -user $user -files $files
-
-    $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
-
-    ## Go through each day record and check if the user has used the app
-    $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.'User Principal Name'
-
-    ## Add total days of data
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TotalDaysOfData" -Value $totalDaysOfData
-
-    ## Is the user licensed for copilot
-    $licened = IsUserLicensedForCopilot2 -userFromGraphReport $user
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "LicensedForCopilot" -Value $licened
-
-    if ($deepAnalysis)
-    {
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "DeepAnalysisPeriod" -Value $period
-
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "EmailsSentInPeriod" -Value (GetValueFromDataForUser -data $emailData -upn $user.'User Principal Name' -property 'Send Count')
-
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ActiveFilesInOneDriveInPeriod" -Value (GetValueFromDataForUser -data $oneDriveData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count')
-
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ActiveFilesInSPOInPeriod" -Value (GetValueFromDataForUser -data $spoData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count')
-
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TotalAudioTimeMins" -Value ([Math]::Round((GetValueFromDataForUser -data $teamData -upn $user.'User Principal Name' -property 'Audio Duration In Seconds') / 60))
-    }
-
+    $usersTotalAppUsage = ProcessUser -user $user -allUsersAppData $allUsersAppData -totalDaysOfData $totalDaysOfData -emailData $emailData -oneDriveData $oneDriveData -spoData $spoData -teamData $teamData -existingReportData $existingReportData
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Report Refresh Date" -Value $today.ToString("yyyy-MM-dd") -Force
     $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
+    
 
     ## Update progress bar
     $currentItem++

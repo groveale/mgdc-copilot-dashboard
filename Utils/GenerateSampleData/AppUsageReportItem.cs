@@ -11,62 +11,62 @@ public class AppUsageReportItem
     public string LastActivityDate { get; set; }
     [Name("Report Period")]
     public int ReportPeriod { get; set; }
-    public bool Windows { get; set; }
-    public bool Mac { get; set; }
-    public bool Mobile { get; set; }
-    public bool Web { get; set; }
-    public bool Outlook { get; set; }
-    public bool Word { get; set; }
-    public bool Excel { get; set; }
-    public bool PowerPoint { get; set; }
-    public bool OneNote { get; set; }
-    public bool Teams { get; set; }
+    public string Windows { get; set; }
+    public string Mac { get; set; }
+    public string Mobile { get; set; }
+    public string Web { get; set; }
+    public string Outlook { get; set; }
+    public string Word { get; set; }
+    public string Excel { get; set; }
+    public string PowerPoint { get; set; }
+    public string OneNote { get; set; }
+    public string Teams { get; set; }
     [Name("Outlook (Windows)")]
-    public bool OutlookWindows { get; set; }
+    public string OutlookWindows { get; set; }
     [Name("Word (Windows)")]
-    public bool WordWindows { get; set; }
+    public string WordWindows { get; set; }
     [Name("Excel (Windows)")]
-    public bool ExcelWindows { get; set; }
+    public string ExcelWindows { get; set; }
     [Name("PowerPoint (Windows)")]
-    public bool PowerPointWindows { get; set; }
+    public string PowerPointWindows { get; set; }
     [Name("OneNote (Windows)")]
-    public bool OneNoteWindows { get; set; }
+    public string OneNoteWindows { get; set; }
     [Name("Teams (Windows)")]
-    public bool TeamsWindows { get; set; }
+    public string TeamsWindows { get; set; }
     [Name("Outlook (Mac)")]
-    public bool OutlookMac { get; set; }
+    public string OutlookMac { get; set; }
     [Name("Word (Mac)")]
-    public bool WordMac { get; set; }
+    public string WordMac { get; set; }
     [Name("Excel (Mac)")]
-    public bool ExcelMac { get; set; }
+    public string ExcelMac { get; set; }
     [Name("PowerPoint (Mac)")]
-    public bool PowerPointMac { get; set; }
+    public string PowerPointMac { get; set; }
     [Name("OneNote (Mac)")]
-    public bool OneNoteMac { get; set; }
+    public string OneNoteMac { get; set; }
     [Name("Teams (Mac)")]
-    public bool TeamsMac { get; set; }
+    public string TeamsMac { get; set; }
     [Name("Outlook (Mobile)")]
-    public bool OutlookMobile { get; set; }
+    public string OutlookMobile { get; set; }
     [Name("Word (Mobile)")]
-    public bool WordMobile { get; set; }
+    public string WordMobile { get; set; }
     [Name("Excel (Mobile)")]
-    public bool ExcelMobile { get; set; }
+    public string ExcelMobile { get; set; }
     [Name("PowerPoint (Mobile)")]
-    public bool PowerPointMobile { get; set; }
+    public string PowerPointMobile { get; set; }
     [Name("OneNote (Mobile)")]
-    public bool OneNoteMobile { get; set; }
+    public string OneNoteMobile { get; set; }
     [Name("Teams (Mobile)")]
-    public bool TeamsMobile { get; set; }
+    public string TeamsMobile { get; set; }
     [Name("Outlook (Web)")]
-    public bool OutlookWeb { get; set; }
+    public string OutlookWeb { get; set; }
     [Name("Word (Web)")]
-    public bool WordWeb { get; set; }
+    public string WordWeb { get; set; }
     [Name("Excel (Web)")]
-    public bool ExcelWeb { get; set; }
+    public string ExcelWeb { get; set; }
     [Name("PowerPoint (Web)")]
-    public bool PowerPointWeb { get; set; }
+    public string PowerPointWeb { get; set; }
     [Name("OneNote (Web)")]
-    public bool OneNoteWeb { get; set; }
+    public string OneNoteWeb { get; set; }
     [Name("Teams (Web)")]
-    public bool TeamsWeb { get; set; }
+    public string TeamsWeb { get; set; }
 }
