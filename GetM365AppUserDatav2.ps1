@@ -39,13 +39,14 @@
 # 2023-10-17 - Flushing the output to avoid memory expections for large tenants, added grouping to help with memory exceptions
 # 2023-10-23 - Updated data collection method to pull data for previously collected days which are empty, added DaysOfData value to output, added total aduio time for team calls
 # 2023-10-27 - Added support to append to existing report
+# 2024-01-31 - Revamp of script to use hashtables to store data, this should help with memory issues and performance in general
 #
 ##############################################
 # Dependencies
 ##############################################
 ## Requires the following modules:
 try {
-    Import-Module Microsoft.Graph.Reports
+    Import-Module Microsoft.Graph.Beta.Reports
 }
 catch {
     Write-Error "Error importing modules required modules - $($Error[0].Exception.Message))"
@@ -54,6 +55,7 @@ catch {
 
 # Graph Permissions
 # Reports.Read.All
+# ReportSettings.ReadWrite.All
 
 
 ##############################################
@@ -71,10 +73,6 @@ $thumbprint = "72A385EF67B35E1DFBACA89180B7B3C8F97453D7"
 $timeStamp = Get-Date -Format "yyyyMMddHHmmss"
 $reportFileLocation = "Output\M365AppUsageReportTotals-$timeStamp.csv"
 $dataFolder = "GeneratedData\1K\"
-
-# For when you want to append data to an existing report
-$appendToExistingReport = $false
-$existingReport = "C:\Users\alexgrover\source\repos\mgdc-copilot-dashboard\Output\M365AppUsageReportTotals-20231027153820.csv"
 
 # Days to go back (max is 28)
 $daysToGoBack = 28
@@ -104,7 +102,6 @@ function ConnectToMSGraph
     try{
         # Disconnect if already connected
         #Disconnect-MgGraph
-
         if($delegatedAuth) {
             Connect-MgGraph -Scopes Reports.Read.All, User.Read.All -ErrorAction Stop
             return
@@ -302,25 +299,11 @@ function GetUsersToCheck ($userDetailsReportGraphData) {
     $users = @()
 
     if ($checkAllUsers) {
-        ## v1.0 method of getting users
-        #return Get-MgUser -All -Property UserPrincipalName, Id
-
-        ## v1.1 method of getting users
         $users = $userDetailsReportGraphData | Select -Property "User Principal Name", "Assigned Products"
         return $users
     }
 
     if ($checkAllLicensedUsers) {
-        # $allUsers = Get-MgUser -All -Property UserPrincipalName, Id
-        # foreach($user in $allUsers) {
-        #     if (IsUserLicensedForCopilot -userId $user.Id)
-        #     {
-        #         $users += $user
-        #     }
-        # }
-        # return $users
-
-        ## v1.1 method of getting users
         return $userDetailsReportGraphData | where { IsUserLicensedForCopilot2 -userFromGraphReport $_ } | Select -Property "User Principal Name", "Assigned Products"
     }
     
@@ -483,9 +466,9 @@ function GetValueFromDataForUser($data, $upn, $property, $searchProperty = "User
     return $usersData.$property
 }
 
-function ProcessUser($user, $allUsersAppData, $totalDaysOfData, $emailData, $oneDriveData, $spoData, $teamData, $existingReportData) 
+function ProcessUser($user, $combinedData, $totalDaysOfData, $emailData, $oneDriveData, $spoData, $teamData, $existingReportData) 
 {
-    $userAppData = ($allUsersAppData | where { $_.Name -eq $user.'User Principal Name' }).Group
+    $userAppData = $combinedData
 
     ## Go through each day record and check if the user has used the app
     $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.'User Principal Name' -existingReportData $existingReportData
@@ -545,20 +528,8 @@ if ($userDetailsReportGraphData -eq $false) {
 
 $users = GetUsersToCheck -userDetailsReportGraphData $userDetailsReportGraphData
 
-if ($appendToExistingReport -eq $true) {
-    ## Read in the report
-    $existingReportData = Import-Csv -Path $existingReport
-    $latestReportDateString = $existingReportData[0]."Report Refresh Date"
-    
-    $latestReportDate = Get-Date -Date $latestReportDateString
-    $combinedData = CombineAndTransformData -latestReportDate $latestReportDate
-}
-else {
-    ## Now the data part
-    $combinedData = CombineAndTransformData # Too intensive on memory
-}
-
-
+## Now the data part
+$combinedData = CombineAndTransformData # Too intensive on memory
 
 # Get Total days were of data
 $files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
@@ -572,7 +543,7 @@ $allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation
 
 # Grouping by user principal name - memory intensive
 Write-Host "Grouping data by user principal name... please wait"
-$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
+#$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name'
 #$allUsersAppData
 Write-Host "Finished grouping"
 
@@ -587,7 +558,7 @@ Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Statu
 foreach($user in $users) {
 
     ## Get the app data for the user
-    $usersTotalAppUsage = ProcessUser -user $user -allUsersAppData $allUsersAppData -totalDaysOfData $totalDaysOfData -emailData $emailData -oneDriveData $oneDriveData -spoData $spoData -teamData $teamData -existingReportData $existingReportData
+    $usersTotalAppUsage = ProcessUser -user $user -combinedData $combinedData -totalDaysOfData $totalDaysOfData -emailData $emailData -oneDriveData $oneDriveData -spoData $spoData -teamData $teamData -existingReportData $existingReportData
     $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Report Refresh Date" -Value $today.ToString("yyyy-MM-dd") -Force
     $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
     

@@ -1,0 +1,30 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.002.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Utils", "Utils", "{E8709196-4A3F-4848-A8C5-DEAE02731BEA}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GenerateSampleData", "Utils\GenerateSampleData\GenerateSampleData.csproj", "{44023A16-7FEB-405B-BB6D-29222F2BCED0}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{44023A16-7FEB-405B-BB6D-29222F2BCED0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{44023A16-7FEB-405B-BB6D-29222F2BCED0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{44023A16-7FEB-405B-BB6D-29222F2BCED0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{44023A16-7FEB-405B-BB6D-29222F2BCED0}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{44023A16-7FEB-405B-BB6D-29222F2BCED0} = {E8709196-4A3F-4848-A8C5-DEAE02731BEA}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6F938E26-9ED4-4CCE-AFEF-F04E20914913}
+	EndGlobalSection
+EndGlobal
