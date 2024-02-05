@@ -14,6 +14,7 @@
 ## Requires the following modules:
 try {
     Import-Module Microsoft.Graph.Beta.Reports
+    Import-Module Microsoft.Graph.Reports
     Import-Module Microsoft.Graph.Sites
 }
 catch {
@@ -62,13 +63,6 @@ $period = "D7"                          # Period to get data for (D7 = 7 days, D
 
 function ConnectToMSGraph {  
     try {
-        # Disconnect if already connected
-        #Disconnect-MgGraph
-        if ($delegatedAuth) {
-            Connect-MgGraph -Scopes Reports.Read.All, User.Read.All -ErrorAction Stop
-            return
-        }
-
         Connect-MgGraph -ClientId $clientId -TenantId $tenantId -CertificateThumbprint $thumbprint -ErrorAction Stop
     }
     catch {
