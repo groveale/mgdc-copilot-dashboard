@@ -37,13 +37,10 @@ $clientId = "4b7482f3-5fac-470b-8f6a-69b59c87c59f"
 $tenantId = "groverale.onmicrosoft.com"
 $thumbprint = "BD4D7AC2DBCD010E04194D467AC996F486512A49"
 
-# Log file location (timestamped with script start time)
-$timeStamp = Get-Date -Format "yyyyMMddHHmmss"
-$reportFileLocation = "Output\M365AppUsageReportTotals-$timeStamp.csv"
-
 #$usageSPOSiteUrl = "https://groverale.sharepoint.com/sites/M365UsageData"
 $m365UsageDataSiteId = "7a838fca-e704-4c57-a6a8-a73a8029bca2"
 $appUsageProcessedLibraryName = "M365AppUsageProcessedReports"
+$appUsageLibraryName = "M365AppUsageReports"
 
 # Users to check config
 $checkAllUsers = $false                 # If true, all users in the tenant will be checked
@@ -60,13 +57,17 @@ $productSKUs = @(
 # Data folder
 $dataFolder = "C:\scratch\m365appusage"
 
+# Log file location (timestamped with script start time)
+$timeStamp = Get-Date -Format "yyyyMMddHHmmss"
+$reportFileLocation = "$dataFolder\M365AppUsageReportTotals-$timeStamp.csv"
+
 # Days to go back (max is 26)
 # We have to skip today and yesterday as the data is not available for these days
-$daysToGoBack = 26
+$daysToGoBack = 4
 
-# Deeper Analysis
-$deepAnalysis = $false                    # If true, deeper analysis will be done (Email, OneDrive)
-$period = "D30"                          # Period to get data for (D7 = 7 days, D30 = 30 days, D90 = 90 days, D180 = 180 days)
+# Process Data
+# If true, the daily data will be processed and uploaded to SPO in a single CSV
+$processData = $true
 
 ##############################################
 # Functions
@@ -107,116 +108,23 @@ function PullAppUsageData {
         $date = $twoDaysAgo.AddDays(-$i)
         
         # Check if we already have the data for this date
-        $appData = Get-ChildItem -Path $dataFolder -Filter "M365AppUserReport-$($date.ToString("yyyy-MM-dd")).csv"
-        if ($appData) {
+        # $appData = Get-ChildItem -Path $dataFolder -Filter "M365AppUserReport-$($date.ToString("yyyy-MM-dd")).csv"
+        # if ($appData) {
 
-            ## Get first two lines of the file
-            $firstTwoLines = Get-Content -Path $appData.FullName -TotalCount 2
-            if ($firstTwoLines.Length -eq 2) {
-                Write-Host "Data already exists for date $date"
-                #UploadFileToSPOGraph -path $appData.FullName -libraryName $appUsageLibraryName
-                continue
-            }
+        #     ## Get first two lines of the file
+        #     $firstTwoLines = Get-Content -Path $appData.FullName -TotalCount 2
+        #     if ($firstTwoLines.Length -eq 2) {
+        #         Write-Host "Data already exists for date $date"
+        #         #UploadFileToSPOGraph -path $appData.FullName -libraryName $appUsageLibraryName
+        #         continue
+        #     }
 
-            ## If length is not two then we have one line that is the header. So overwrite the file as empty
-        }
+        #     ## If length is not two then we have one line that is the header. So overwrite the file as empty
+        # }
     
         Write-Host "Getting app user details for date $date"
         GetAppUserDetailsForDate($date)
     }
-}
-
-function PullEmailUsageData ($period) {
-    $today = Get-Date
-    $outputPath = Join-Path -Path $dataFolder -ChildPath "ExchangeUserReport-$($today.ToString("yyyy-MM-dd"))-$period.csv"
-    
-    try {
-        Get-ChildItem -Path $outputPath -ErrorAction Stop
-    }
-    catch {
-        try {
-            #Get-MgReportEmailActivityUserDetail -Period $period -OutFile $outputPath
-            Get-MgReportEmailActivityUserDetail -Period $period -OutFile $outputPath
-        }
-        catch {
-            Write-Error "Error getting Email usage data - $($_.Exception.Message)"
-            return $false
-        }
-    }
-
-    $data = Import-Csv -Path $outputPath
-
-    # Group by user principal name
-    return $data | Group-Object -Property 'User Principal Name' -AsHashTable
-}
-
-function PullOneDriveUsageData ($period) {
-    $today = Get-Date
-    $outputPath = Join-Path -Path $dataFolder -ChildPath "OneDriveActivityUserDetail-$($today.ToString("yyyy-MM-dd"))-$period.csv"
-    
-    try {
-        Get-ChildItem -Path $outputPath -ErrorAction Stop
-    }
-    catch { 
-
-        try {
-            #Get-MgReportOneDriveUsageAccountDetail -Period $period -OutFile $outputPath
-            Get-MgReportOneDriveActivityUserDetail -Period $period -OutFile $outputPath
-        }
-        catch {
-            Write-Error "Error getting OneDrive usage data - $($_.Exception.Message)"
-            return $false
-        }
-    } 
-
-    $data = Import-Csv -Path $outputPath
-
-    # Group by user principal name
-    return $data | Group-Object -Property 'User Principal Name' -AsHashTable
-}
-
-function PullSPOUsageData ($period) {
-    $today = Get-Date
-    $outputPath = Join-Path -Path $dataFolder -ChildPath "SharePointActivityUserDetail-$($today.ToString("yyyy-MM-dd"))-$period.csv"
-
-    try {
-        Get-ChildItem -Path $outputPath -ErrorAction Stop
-    }
-    catch {
-        try {
-            Get-MgReportSharePointActivityUserDetail -Period $period -OutFile $outputPath
-        }
-        catch {
-            Write-Error "Error getting SharePoint usage data - $($_.Exception.Message)"
-            return $false
-        }
-    }
-
-    $data = Import-Csv -Path $outputPath
-    # Group by user principal name
-    return $data | Group-Object -Property 'User Principal Name' -AsHashTable
-}
-
-function PullTeamUsageData ($period) {
-    $today = Get-Date
-    $outputPath = Join-Path -Path $dataFolder -ChildPath "TeamActivityUserDetail-$($today.ToString("yyyy-MM-dd"))-$period.csv"
-
-    try {
-        Get-ChildItem -Path $outputPath -ErrorAction Stop
-    }
-    catch {
-        try {
-            Get-MgReportTeamUserActivityUserDetail -Period $period -OutFile $outputPath
-        }
-        catch {
-            Write-Error "Error getting Teams usage data - $($_.Exception.Message)"
-            return $false
-        }
-    }
-
-    $data = Import-Csv -Path $outputPath
-    # Group by user principal name
-    return $data | Group-Object -Property 'User Principal Name' -AsHashTable
 }
 
 function GetUserDetail() {
@@ -251,7 +159,7 @@ function UploadFileToSPOGraph($path, $libraryName) {
     $fileContent = [System.IO.File]::ReadAllBytes($path)
 
     # Destination file name
-    $destinationName = "$($fileProperties.BaseName)-$($fileProperties.Extension)"
+    $destinationName = "$($fileProperties.BaseName)$($fileProperties.Extension)"
 
     # Upload the file to SharePoint
     $uploadReq = Invoke-MgGraphRequest -Method PUT -Uri "https://graph.microsoft.com/v1.0/drives/$driveId/root:/$destinationName`:/content" -Body $fileContent -ContentType "application/octet-stream"
@@ -294,6 +202,31 @@ function GetUsersToCheck ($userDetailsReportGraphData) {
     foreach ($user in $usersToCheck) {
         $user = $user.Trim()
         $user = $userDetailsReportGraphData | where { $_.'User Principal Name' -eq $user } | Select -Property "User Principal Name", "Assigned Products"
+        if ($user) {
+            $users += $user
+        }
+    }
+
+    return $users
+}
+
+function GetUsersToExclude ($userDetailsReportGraphData) {
+
+    $users = @()
+
+    if ($checkAllLicensedUsers) {
+        return $userDetailsReportGraphData | where { !(IsUserLicensedForCopilot2 -userFromGraphReport $_) } | Select -Property "User Principal Name", "Assigned Products"
+    }
+    
+    if (-not (Test-Path -Path $usersToCheckPath)) {
+        Write-Error "UsersToCheck file not found"
+        Exit
+    }
+
+    $usersToCheck = Get-Content -Path $usersToCheckPath
+    foreach ($user in $usersToCheck) {
+        $user = $user.Trim()
+        $user = $userDetailsReportGraphData | where { !$_.'User Principal Name' -eq $user } | Select -Property "User Principal Name", "Assigned Products"
         if ($user) {
             $users += $user
         }
@@ -441,18 +374,6 @@ function ProcessUser($user, $allUsersAppData, $totalDaysOfData, $emailData, $one
     $licened = IsUserLicensedForCopilot2 -userFromGraphReport $user
     $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "LicensedForCopilot" -Value $licened -Force
 
-    if ($deepAnalysis) {
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "DeepAnalysisPeriod" -Value $period -Force
-
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "EmailsSentInPeriod" -Value (GetValueFromDataForUser -data $emailData -upn $user.'User Principal Name' -property 'Send Count') -Force
-
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ActiveFilesInOneDriveInPeriod" -Value (GetValueFromDataForUser -data $oneDriveData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count') -Force
-
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "ActiveFilesInSPOInPeriod" -Value (GetValueFromDataForUser -data $spoData -upn $user.'User Principal Name' -property 'Viewed Or Edited File Count') -Force
-
-        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "TotalAudioTimeMins" -Value ([Math]::Round((GetValueFromDataForUser -data $teamData -upn $user.'User Principal Name' -property 'Audio Duration In Seconds') / 60)) -Force
-    }
-
     return $usersTotalAppUsage
 }
 
@@ -469,6 +390,15 @@ function IsUserLicensedForCopilot2($userFromGraphReport) {
     }
 
     return $false
+}
+
+function RemoveUsersFromData($usersToExclude, $dailyDataFile) {
+    
+    $dailyData = Import-Csv -Path $dailyDataFile
+
+    $filteredData = $dailyData | Where-Object { $usersToExclude -notcontains $_.'User Principal Name' }
+
+    return $filteredData
 }
 
 ##############################################
@@ -489,19 +419,6 @@ if ($displayConcealedName -eq $true) {
 
 PullAppUsageData
 
-if ($deepAnalysis) {
-
-    Write-Host "Pulling and grouping deeper analysis data... please wait"
-
-    $emailData = PullEmailUsageData -period $period
-
-    $oneDriveData = PullOneDriveUsageData -period $period
-    
-    $spoData = PullSPOUsageData -period $period
-
-    $teamData = PullTeamUsageData -period $period
-}
-
 ## Processing
 
 $userDetailsReportGraphData = GetUserDetail
@@ -512,55 +429,81 @@ if ($userDetailsReportGraphData -eq $false) {
 }
 
 $users = GetUsersToCheck -userDetailsReportGraphData $userDetailsReportGraphData
-
-
-## Now the data part
-$combinedData = CombineAndTransformData # Too intensive on memory
+$usersToExclude = GetUsersToExclude -userDetailsReportGraphData $userDetailsReportGraphData
+$usersToExcludeUPNs = $usersToExclude.'User Principal Name'
 
 # Get Total days were of data
 $files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
-$totalDaysOfData = $files.Count
 
-## Go through each user and filter the data by user
-$allUsersTotalAppUsage = @()
-
-## Initilaise the CSV
-$allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Force
-
-# Grouping by user principal name - memory intensive
-Write-Host "Grouping data by user principal name... please wait"
-$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name' -AsHashTable
-Write-Host "Finished grouping"
-
-
-# Initilaise progress bar
-#cls
-$today = Get-Date
-$currentItem = 0
-$percent = 0
-Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
-
-foreach ($user in $users) {
-
-    ## Get the app data for the user
-    $usersTotalAppUsage = ProcessUser -user $user -allUsersAppData $allUsersAppData -totalDaysOfData $totalDaysOfData -emailData $emailData -oneDriveData $oneDriveData -spoData $spoData -teamData $teamData -existingReportData $existingReportData
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Snapshot End Date" -Value $today.AddDays(-2).ToString("yyyy-MM-dd") -Force
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Snapshot Start Date" -Value $today.AddDays(-$daysToGoBack-2).ToString("yyyy-MM-dd") -Force
-    $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
+# Read in all the files and remove any users in the $usersToExclude list
+foreach ($file in $files) {
     
+    $filteredData = RemoveUsersFromData -usersToExclude $usersToExcludeUPNs -dailyDataFile $file.FullName
 
-    ## Update progress bar
-    $currentItem++
-    $percent = [Math]::Round(($currentItem / $users.Count) * 100)
-    Write-Progress -Activity "Processed User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
+    if ($filteredData.Count -eq 0) {
+        Write-Host "No data for $($file.FullName)"
+        continue
+    }
 
+    $newFileName = $file.FullName.Replace(".csv", "-Filtered.csv")
+
+    $filteredData | Export-Csv -Path $newFileName -NoTypeInformation -Force
+
+    # Upload the file to SharePoint
+    UploadFileToSPOGraph -path $newFileName -libraryName $appUsageLibraryName
 }
 
-## Close the progress bar
-Write-Progress -Activity "Processed User $currentItem / $($users.Count)" -Status "100% Complete:" -Completed
 
-## Upload the CSV to SPO
-UploadFileToSPOGraph -path $reportFileLocation -libraryName $appUsageProcessedLibraryName
+if ($processData -eq $true)
+{
+    $totalDaysOfData = $files.Count
+
+    ## Now the data part
+    $combinedData = CombineAndTransformData # Too intensive on memory
+
+    ## Go through each user and filter the data by user
+    $allUsersTotalAppUsage = @()
+
+    ## Initilaise the CSV
+    $allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Force
+
+    # Grouping by user principal name - memory intensive
+    Write-Host "Grouping data by user principal name... please wait"
+    $allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name' -AsHashTable
+    Write-Host "Finished grouping"
+
+    # Initilaise progress bar
+    #cls
+    $today = Get-Date
+    $currentItem = 0
+    $percent = 0
+    Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
+
+    foreach ($user in $users) {
+
+        ## Get the app data for the user
+        $usersTotalAppUsage = ProcessUser -user $user -allUsersAppData $allUsersAppData -totalDaysOfData $totalDaysOfData
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Snapshot End Date" -Value $today.AddDays(-2).ToString("yyyy-MM-dd") -Force
+        $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Snapshot Start Date" -Value $today.AddDays(-$daysToGoBack-2).ToString("yyyy-MM-dd") -Force
+        $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
+        
+
+        ## Update progress bar
+        $currentItem++
+        $percent = [Math]::Round(($currentItem / $users.Count) * 100)
+        Write-Progress -Activity "Processed User $currentItem / $($users.Count)" -Status "$percent% Complete:" -PercentComplete $percent
+
+    }
+
+    ## Close the progress bar
+    Write-Progress -Activity "Processed User $currentItem / $($users.Count)" -Status "100% Complete:" -Completed
+
+    ## Upload the CSV to SPO
+    UploadFileToSPOGraph -path $reportFileLocation -libraryName $appUsageProcessedLibraryName
+}
+
+# Clean up the data folder but don't delete the folder
+Remove-Item -Path $dataFolder\* -Recurse -Force
 
 if ($displayConcealedName -eq $true) {
     UpdateReportSettings -displayConcealedNames $true
