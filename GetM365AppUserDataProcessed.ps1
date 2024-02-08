@@ -7,6 +7,7 @@
 #
 # VersionLog : 
 # 2024-01-31 - Initial version
+# 2024-02-05 - Added processing using hashtables
 #
 ##############################################
 # Dependencies
@@ -50,7 +51,7 @@ $appUsageProcessedLibraryName = "M365AppUsageProcessedReports"
 # $teamUsageLibraryName = "TeamsUsageReports"
 
 # Users to check config
-$checkAllUsers = $true                 # If true, all users in the tenant will be checked
+$checkAllUsers = $false                 # If true, all users in the tenant will be checked
 $checkAllLicensedUsers = $true         # If true, only users with licenses in the $licenseSKUs array will be checked
 $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
 
@@ -64,11 +65,12 @@ $productSKUs = @(
 # Data folder
 $dataFolder = "C:\scratch\m365appusage"
 
-# Days to go back (max is 28)
-$daysToGoBack = 28
+# Days to go back (max is 26)
+# We have to skip today and yesterday as the data is not available for these days
+$daysToGoBack = 26
 
 # Deeper Analysis
-$deepAnalysis = $true                    # If true, deeper analysis will be done (Email, OneDrive)
+$deepAnalysis = $false                    # If true, deeper analysis will be done (Email, OneDrive)
 $period = "D30"                          # Period to get data for (D7 = 7 days, D30 = 30 days, D90 = 90 days, D180 = 180 days)
 
 ##############################################
@@ -103,9 +105,11 @@ function GetAppUserDetailsForDate($date) {
 }
 
 function PullAppUsageData {
+    $today = Get-Date
+    $twoDaysAgo = $today.AddDays(-2)
     for ($i = 0; $i -lt $daysToGoBack; $i++) {
-        $today = Get-Date
-        $date = $today.AddDays(-$i)
+        
+        $date = $twoDaysAgo.AddDays(-$i)
         
         # Check if we already have the data for this date
         $appData = Get-ChildItem -Path $dataFolder -Filter "M365AppUserReport-$($date.ToString("yyyy-MM-dd")).csv"
@@ -545,7 +549,7 @@ foreach ($user in $users) {
 
     ## Get the app data for the user
     $usersTotalAppUsage = ProcessUser -user $user -allUsersAppData $allUsersAppData -totalDaysOfData $totalDaysOfData -emailData $emailData -oneDriveData $oneDriveData -spoData $spoData -teamData $teamData -existingReportData $existingReportData
-    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Snapshot Date" -Value $today.ToString("yyyy-MM-dd") -Force
+    $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Snapshot Date" -Value $today.AddDays(-2).ToString("yyyy-MM-dd") -Force
     $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
     
 
