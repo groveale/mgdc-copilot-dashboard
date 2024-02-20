@@ -44,7 +44,7 @@ $appUsageLibraryName = "M365AppUsageReports"
 
 # Users to check config
 $checkAllUsers = $false                 # If true, all users in the tenant will be checked
-$checkAllLicensedUsers = $true         # If true, only users with licenses in the $licenseSKUs array will be checked
+$checkAllLicensedUsers = $false         # If true, only users with licenses in the $licenseSKUs array will be checked
 $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
 
 # Licenses to check
@@ -214,6 +214,11 @@ function GetUsersToExclude ($userDetailsReportGraphData) {
 
     $users = @()
 
+    if ($checkAllUsers) {
+        # We are checking everyone, to exlude no one
+        return $users
+    }
+
     if ($checkAllLicensedUsers) {
         return $userDetailsReportGraphData | where { !(IsUserLicensedForCopilot2 -userFromGraphReport $_) } | Select -Property "User Principal Name", "Assigned Products"
     }
@@ -224,15 +229,8 @@ function GetUsersToExclude ($userDetailsReportGraphData) {
     }
 
     $usersToCheck = Get-Content -Path $usersToCheckPath
-    foreach ($user in $usersToCheck) {
-        $user = $user.Trim()
-        $user = $userDetailsReportGraphData | where { !$_.'User Principal Name' -eq $user } | Select -Property "User Principal Name", "Assigned Products"
-        if ($user) {
-            $users += $user
-        }
-    }
 
-    return $users
+    return $userDetailsReportGraphData | where { $usersToCheck -notcontains $_.'User Principal Name' } | Select -Property "User Principal Name", "Assigned Products"
 }
 
 function CombineAndTransformData($latestReportDate = $null) {
@@ -423,6 +421,10 @@ PullAppUsageData
 
 $userDetailsReportGraphData = GetUserDetail
 
+if ($displayConcealedName -eq $true) {
+    UpdateReportSettings -displayConcealedNames $true
+}
+
 if ($userDetailsReportGraphData -eq $false) {
     Write-Error "Error getting user details report data"
     Exit
@@ -504,10 +506,6 @@ if ($processData -eq $true)
 
 # Clean up the data folder but don't delete the folder
 Remove-Item -Path $dataFolder\* -Recurse -Force
-
-if ($displayConcealedName -eq $true) {
-    UpdateReportSettings -displayConcealedNames $true
-}
 
 Write-Host "Script completed in $($stopWatch.Elapsed.TotalSeconds) seconds" -ForegroundColor Green
 
