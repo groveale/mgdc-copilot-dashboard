@@ -504,11 +504,11 @@ $stopWatch = [System.Diagnostics.Stopwatch]::StartNew()
 # ConnectToMSGraph
 
 # # Update the report settings
-# $displayConcealedName = GetReportSettings
+$displayConcealedName = GetReportSettings
 
-# if ($displayConcealedName -eq $true) {
-#     UpdateReportSettings -displayConcealedNames $false
-# }
+if ($displayConcealedName -eq $true) {
+    UpdateReportSettings -displayConcealedNames $false
+}
 
 PullAppUsageData
 
@@ -581,9 +581,9 @@ Write-Progress -Activity "Processed User $currentItem / $($users.Count)" -Status
 ## Upload the CSV to SPO
 # UploadFileToSPOGraph -path $reportFileLocation -libraryName $appUsageProcessedLibraryName
 
-# if ($displayConcealedName -eq $true) {
-#     UpdateReportSettings -displayConcealedNames $true
-# }
+if ($displayConcealedName -eq $true) {
+    UpdateReportSettings -displayConcealedNames $true
+}
 
 Write-Host "Script completed in $($stopWatch.Elapsed.TotalSeconds) seconds" -ForegroundColor Green
 
