@@ -1,12 +1,14 @@
 #############################################
 # Description: 
-# This script pulls M365 app usage data from MSGraph and saves the output into an SPO library.
-# This data can then be ingested into a data warehouse for further analysis.
+# This script pulls Copilot app usage data from private report APIs. It uses the reports 
+# to build a list of users and their last activity date for the Copilot app. This is saved in SPO
+#
+# The report must be run daily. Otherwise we miss a day of data.
 #
 # Alex Grover - alexgrover@microsoft.com
 #
 # VersionLog : 
-# 2024-01-31 - Initial version
+# 2024-03-07 - Initial version
 #
 ##############################################
 # Dependencies
@@ -14,7 +16,6 @@
 ## Requires the following modules:
 try {
     Import-Module Microsoft.Graph.Beta.Reports
-    Import-Module Microsoft.Graph.Reports
     Import-Module Microsoft.Graph.Sites
 }
 catch {
@@ -23,7 +24,6 @@ catch {
 }
 
 # Graph Permissions
-# Reports.Read.All
 # ReportSettings.ReadWrite.All
 # Sites.Selected
 
@@ -41,15 +41,12 @@ $thumbprint = "BD4D7AC2DBCD010E04194D467AC996F486512A49"
 
 #$usageSPOSiteUrl = "https://groverale.sharepoint.com/sites/M365UsageData"
 $m365UsageDataSiteId = "7a838fca-e704-4c57-a6a8-a73a8029bca2"
-$appUsageLibraryName = "M365AppUsageReports"
+$copilotUsageLibraryName = "CopiloptAppDailyReports"
+
+$cookiesTXTFilePath = ".\cookies.txt"
 
 # Data folder
-$dataFolder = "C:\scratch\m365appusage"
-
-# Days to go back (max is 25)
-# Going back 1 day will give you the report for 3 days ago
-# There is no report data for the current day, yesterday or the previous day
-$daysToGoBack = 25
+$dataFolder = "C:\scratch\copilotappusage"
 
 ##############################################
 # Functions
@@ -62,57 +59,6 @@ function ConnectToMSGraph {
     catch {
         Write-Host "Error connecting to MS Graph - $($Error[0].Exception.Message)" -ForegroundColor Red
         Exit
-    }
-}
-
-function Get-AppUserDetailsForDate($date) {
-
-    try {
-        $dateString = $date.ToString("yyyy-MM-dd")
-        $outputPath = Join-Path -Path $dataFolder -ChildPath "M365AppUserReport-$dateString.csv"
-        Get-MgReportM365AppUserDetail -Date $date -OutFile $outputPath
-
-        # Upload the file to SharePoint
-        UploadFileToSPOGraph -path $outputPath -libraryName $appUsageLibraryName
-        return $true
-    }
-    catch {
-        Write-Error "Error getting app user details for date $date - $($_.Exception.Message)"
-        return $false
-    }
-}
-
-function PullAppUsageData {
-
-    if ($daysToGoBack -gt 25)
-    {
-        $daysToGoBack = 25
-    }
-
-    $today = Get-Date
-    $threeDaysAgo = $today.AddDays(-3)
-  
-    for ($i = 0; $i -lt $daysToGoBack; $i++) {
-
-        $date = $threeDaysAgo.AddDays(-$i)
-        
-        # Check if we already have the data for this date
-        $appData = Get-ChildItem -Path $dataFolder -Filter "M365AppUserReport-$($date.ToString("yyyy-MM-dd")).csv"
-        if ($appData) {
-
-            ## Get first two lines of the file
-            $firstTwoLines = Get-Content -Path $appData.FullName -TotalCount 2
-            if ($firstTwoLines.Length -eq 2) {
-                Write-Host "Data already exists for date $date"
-                UploadFileToSPOGraph -path $appData.FullName -libraryName $appUsageLibraryName
-                continue
-            }
-
-            ## If length is not two then we have one line that is the header. So overwrite the file as empty
-        }
-    
-        Write-Host "Getting app user details for date $date"
-        Get-AppUserDetailsForDate($date)
     }
 }
 
@@ -147,6 +93,18 @@ function GetReportSettings {
     return $reportSettings.DisplayConcealedNames
 }
 
+function IfDailyActivityForApp ($userActivtyObj, $appLastActivityData, $reportRefreshDate, $propertyName)
+{
+    if ($appLastActivityData -eq $reportRefreshDate) 
+    { 
+        $userActivtyObj | Add-Member -MemberType NoteProperty -Name $propertyName -Value True 
+    }
+    else 
+    { 
+        $userActivtyObj | Add-Member -MemberType NoteProperty -Name $propertyName -Value False
+    }
+}
+
 ##############################################
 # Main
 ##############################################
@@ -163,7 +121,7 @@ if ($displayConcealedName -eq $true) {
     UpdateReportSettings -displayConcealedNames $false
 }
 
-PullAppUsageData
+
 
 if ($displayConcealedName -eq $true) {
     UpdateReportSettings -displayConcealedNames $true

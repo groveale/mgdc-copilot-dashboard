@@ -9,9 +9,9 @@ namespace GenerateSampleData
 
         static void Main(string[] args)
         {
-            int userCount = 1000;
+            int userCount = 10000;
             int days = 30;
-            string filePath = "C:\\Users\\alexgrover\\source\\repos\\mgdc-copilot-dashboard\\GeneratedData\\1K";
+            string filePath = "C:\\Users\\alexgrover\\source\\repos\\mgdc-copilot-dashboard\\GeneratedData\\10K";
 
             var today = DateTime.Now;
 

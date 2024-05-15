@@ -1,6 +1,9 @@
+CopilotMAC
 Data
 Output
 TestData
 GeneratedData
 Utils/GenerateSampleData/bin
 Utils/GenerateSampleData/obj
+
+CopilotMAC/ConnectToMSGraph.ps1

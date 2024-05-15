@@ -46,7 +46,7 @@ $m365UsageDataSiteId = "7a838fca-e704-4c57-a6a8-a73a8029bca2"
 $appUsageProcessedLibraryName = "M365AppUsageProcessedReports"
 
 # Users to check config
-$checkAllUsers = $false                 # If true, all users in the tenant will be checked
+$checkAllUsers = $true                 # If true, all users in the tenant will be checked
 $checkAllLicensedUsers = $true         # If true, only users with licenses in the $licenseSKUs array will be checked
 $usersToCheckPath = "UsersToCheck.txt"  # If not checking all users / all licensed users, this file will be used to get the list of users to check
 
@@ -58,7 +58,7 @@ $productSKUs = @(
 )
 
 # Data folder
-$dataFolder = "C:\scratch\m365appusage"
+$dataFolder = "C:\Users\alexgrover\source\repos\mgdc-copilot-dashboard\GeneratedData\10K"
 
 # Days to go back (max is 26)
 # We have to skip today and yesterday as the data is not available for these days
@@ -303,9 +303,13 @@ function GetUsersToCheck ($userDetailsReportGraphData) {
 }
 
 function CombineAndTransformData($latestReportDate = $null) {
-    $combinedData = @()
+    $combinedDataHash = @{}
     $files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
     foreach ($file in $files) {
+
+        # Create an empty hashtable
+        $dAUHash = @{}
+
         if ($null -ne $latestReportDate) {
 
             $reportDate = Get-DateFromFileName -fileName $file.Name
@@ -313,18 +317,30 @@ function CombineAndTransformData($latestReportDate = $null) {
                 if ($reportDate -gt $latestReportDate) {
                     ## New data, add to combined data
                     $data = Import-Csv -Path $file.FullName
-                    $combinedData += $data
+                    
+                    # Populate the hashtable with the CSV data
+                    foreach ($row in $data) {
+                        $dAUHash[$row.'User Principal Name'] = $row
+                    }
                 }
             }
         }
         else {
             ## If no latest report date then just add all data
             $data = Import-Csv -Path $file.FullName
-            $combinedData += $data
+
+            # Populate the hashtable with the CSV data
+            foreach ($row in $data) {
+                $dAUHash[$row.'User Principal Name'] = $row
+            }
         }
+
+        
+        ## We can now iterate the daily hash and index to the user
+        $combinedDataHash[$file.Name] = $dAUHash
     }
 
-    return $combinedData
+    return $combinedDataHash
 }
 
 function GetUsersTotalAppUsage($userAppData, $upn) {
@@ -427,9 +443,16 @@ function UpdatePlatformUsage($usersTotalAppUsage, $memberName, $newValue) {
     }
 }
 
-function ProcessUser($user, $allUsersAppData, $totalDaysOfData, $emailData, $oneDriveData, $spoData, $teamData) {
+function ProcessUser($user, $allUsersAppDataHash, $totalDaysOfData, $emailData, $oneDriveData, $spoData, $teamData) {
     # Index Rather than itterate through
-    $userAppData = $allUsersAppData[$user.'User Principal Name']
+    $userAppData = @()
+
+    foreach($dayKey in $allUsersAppDataHash.Keys)
+    {
+        $dauHash = $allUsersAppDataHash[$dayKey]
+        $usersDayData = $dauHash[$user.'User Principal Name']
+        $userAppData += $usersDayData 
+    }
 
     ## Go through each day record and check if the user has used the app
     $usersTotalAppUsage = GetUsersTotalAppUsage -userAppData $userAppData -upn $user.'User Principal Name'
@@ -478,14 +501,14 @@ function IsUserLicensedForCopilot2($userFromGraphReport) {
 ## Initilaise the stopwatch
 $stopWatch = [System.Diagnostics.Stopwatch]::StartNew()
 
-ConnectToMSGraph
+# ConnectToMSGraph
 
-# Update the report settings
-$displayConcealedName = GetReportSettings
+# # Update the report settings
+# $displayConcealedName = GetReportSettings
 
-if ($displayConcealedName -eq $true) {
-    UpdateReportSettings -displayConcealedNames $false
-}
+# if ($displayConcealedName -eq $true) {
+#     UpdateReportSettings -displayConcealedNames $false
+# }
 
 PullAppUsageData
 
@@ -515,7 +538,7 @@ $users = GetUsersToCheck -userDetailsReportGraphData $userDetailsReportGraphData
 
 
 ## Now the data part
-$combinedData = CombineAndTransformData # Too intensive on memory
+$combinedDataHash = CombineAndTransformData
 
 # Get Total days were of data
 $files = Get-ChildItem -Path $dataFolder -Filter M365AppUserReport*.csv
@@ -526,11 +549,6 @@ $allUsersTotalAppUsage = @()
 
 ## Initilaise the CSV
 $allUsersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Force
-
-# Grouping by user principal name - memory intensive
-Write-Host "Grouping data by user principal name... please wait"
-$allUsersAppData = $combinedData | Group-Object -Property 'User Principal Name' -AsHashTable
-Write-Host "Finished grouping"
 
 
 # Initilaise progress bar
@@ -543,7 +561,7 @@ Write-Progress -Activity "Processing User $currentItem / $($users.Count)" -Statu
 foreach ($user in $users) {
 
     ## Get the app data for the user
-    $usersTotalAppUsage = ProcessUser -user $user -allUsersAppData $allUsersAppData -totalDaysOfData $totalDaysOfData -emailData $emailData -oneDriveData $oneDriveData -spoData $spoData -teamData $teamData -existingReportData $existingReportData
+    $usersTotalAppUsage = ProcessUser -user $user -allUsersAppDataHash $combinedDataHash -totalDaysOfData $totalDaysOfData -emailData $emailData -oneDriveData $oneDriveData -spoData $spoData -teamData $teamData -existingReportData $existingReportData
     $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Snapshot End Date" -Value $today.AddDays(-2).ToString("yyyy-MM-dd") -Force
     $usersTotalAppUsage | Add-Member -MemberType NoteProperty -Name "Snapshot Start Date" -Value $today.AddDays(-$daysToGoBack-2).ToString("yyyy-MM-dd") -Force
     $usersTotalAppUsage | Export-Csv -Path $reportFileLocation -NoTypeInformation -Append
@@ -559,12 +577,13 @@ foreach ($user in $users) {
 ## Close the progress bar
 Write-Progress -Activity "Processed User $currentItem / $($users.Count)" -Status "100% Complete:" -Completed
 
-## Upload the CSV to SPO
-UploadFileToSPOGraph -path $reportFileLocation -libraryName $appUsageProcessedLibraryName
 
-if ($displayConcealedName -eq $true) {
-    UpdateReportSettings -displayConcealedNames $true
-}
+## Upload the CSV to SPO
+# UploadFileToSPOGraph -path $reportFileLocation -libraryName $appUsageProcessedLibraryName
+
+# if ($displayConcealedName -eq $true) {
+#     UpdateReportSettings -displayConcealedNames $true
+# }
 
 Write-Host "Script completed in $($stopWatch.Elapsed.TotalSeconds) seconds" -ForegroundColor Green
 
